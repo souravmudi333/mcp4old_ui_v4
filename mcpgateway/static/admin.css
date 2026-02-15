@@ -80,3 +80,287 @@
 }
 
 
+/* =======================================================
+   FRACTAL GATEWAY PANEL STYLING
+======================================================= */
+
+:root{
+  --fractal-navy: #2076e6;
+  --fractal-amber: #f2b705;
+}
+
+/* Card Surface */
+#gateways-panel .gw-card{
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.dark #gateways-panel .gw-card{
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+#gateways-panel .gw-card:hover{
+  border-color: rgba(11,31,58,0.25);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+/* Left accent strip */
+#gateways-panel .gw-strip{
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  border-top-left-radius:14px;
+  border-bottom-left-radius:14px;
+}
+
+/* Pills */
+#gateways-panel .gw-pill{
+  border-radius:999px;
+  font-size:12px;
+  padding:4px 10px;
+  border:1px solid rgba(0,0,0,0.08);
+  background: rgba(11,31,58,0.05);
+  color:#111827;
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+}
+
+.dark #gateways-panel .gw-pill{
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color:#e5e7eb;
+}
+
+#gateways-panel .gw-pill-amber{
+  border-color: rgba(242,183,5,0.35);
+  background: rgba(242,183,5,0.12);
+  color:#7a5200;
+}
+
+.dark #gateways-panel .gw-pill-amber{
+  background: rgba(242,183,5,0.18);
+  color:#ffe08a;
+}
+
+#gateways-panel .gw-divider{
+  height:1px;
+  background: rgba(0,0,0,0.06);
+}
+
+.dark #gateways-panel .gw-divider{
+  background: rgba(255,255,255,0.08);
+}
+
+/* Fractal Primary Button */
+#gateways-panel .btn-primary{
+  background: var(--fractal-navy);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+#gateways-panel .btn-primary:hover{
+  background: #122a4d;
+}
+
+/* =======================================================
+  VIRTUAL SERVERS (CATALOG PANEL) - CLONE GATEWAYS LOOK
+======================================================= */
+
+/* Card Surface (same as #gateways-panel .gw-card) */
+#catalog-panel .sv-card{
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.dark #catalog-panel .sv-card{
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+#catalog-panel .sv-card:hover{
+  border-color: rgba(11,31,58,0.25);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+/* Pills (same as #gateways-panel .gw-pill) */
+#catalog-panel .sv-pill{
+  border-radius:999px;
+  font-size:12px;
+  padding:4px 10px;
+  border:1px solid rgba(0,0,0,0.08);
+  background: rgba(11,31,58,0.05);
+  color:#111827;
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+  max-width:100%;
+}
+
+.dark #catalog-panel .sv-pill{
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color:#e5e7eb;
+}
+
+/* Divider (same as #gateways-panel .gw-divider) */
+#catalog-panel .sv-divider{
+  height:1px;
+  background: rgba(0,0,0,0.06);
+}
+.dark #catalog-panel .sv-divider{
+  background: rgba(255,255,255,0.08);
+}
+
+/* Meta label (same spirit as gateway meta) */
+#catalog-panel .sv-meta-label{
+  font-size: 12px;
+  color: rgba(107,114,128,1);
+}
+.dark #catalog-panel .sv-meta-label{
+  color: rgba(156,163,175,1);
+}
+
+/* Make the create button match the Gateways create button */
+#catalog-panel .btn-primary{
+  background: var(--fractal-navy);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+#catalog-panel .btn-primary:hover{
+  background: #122a4d;
+}
+
+/* Optional: if your toggle button has different padding/rounding */
+#catalog-panel .toggle-btn-mcp{
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+/* =======================================================
+  TOOLS PANEL - CLONE GATEWAYS LOOK & FEEL
+  (Cards, pills, dividers, actions dropdown style)
+======================================================= */
+
+#tools-panel .tool-card{
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.dark #tools-panel .tool-card{
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+#tools-panel .tool-card:hover{
+  border-color: rgba(11,31,58,0.25);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+/* Divider (same as gateways) */
+#tools-panel .tool-divider{
+  height:1px;
+  background: rgba(0,0,0,0.06);
+}
+.dark #tools-panel .tool-divider{
+  background: rgba(255,255,255,0.08);
+}
+
+/* Pills (same pattern as gateways) */
+#tools-panel .tool-pill{
+  border-radius:999px;
+  font-size:12px;
+  padding:4px 10px;
+  border:1px solid rgba(0,0,0,0.08);
+  background: rgba(11,31,58,0.05);
+  color:#111827;
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+  max-width:100%;
+}
+
+.dark #tools-panel .tool-pill{
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color:#e5e7eb;
+}
+
+/* Common colored pills (optional helpers) */
+#tools-panel .tool-pill-blue{
+  border-color: rgba(37,97,193,0.22);
+  background: rgba(37,97,193,0.10);
+  color: rgba(30,58,138,1);
+}
+#tools-panel .tool-pill-green{
+  border-color: rgba(34,197,94,0.22);
+  background: rgba(34,197,94,0.10);
+  color: rgba(20,83,45,1);
+}
+#tools-panel .tool-pill-amber{
+  border-color: rgba(242,183,5,0.35);
+  background: rgba(242,183,5,0.12);
+  color:#7a5200;
+}
+.dark #tools-panel .tool-pill-amber{
+  background: rgba(242,183,5,0.18);
+  color:#ffe08a;
+}
+#tools-panel .tool-pill-red{
+  border-color: rgba(239,68,68,0.25);
+  background: rgba(239,68,68,0.08);
+  color: rgba(127,29,29,1);
+}
+
+/* Meta label (small grey label like gateways "Last Seen") */
+#tools-panel .tool-meta-label{
+  font-size: 12px;
+  color: rgba(107,114,128,1);
+}
+.dark #tools-panel .tool-meta-label{
+  color: rgba(156,163,175,1);
+}
+
+/* Primary button inside tools panel (same as gateways) */
+#tools-panel .btn-primary{
+  background: var(--fractal-navy);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+#tools-panel .btn-primary:hover{
+  background: #122a4d;
+}
+
+/* Actions dropdown container should always render above cards cleanly */
+#tools-panel .tool-actions-menu{
+  border-radius: 12px;
+  overflow: hidden;
+}
