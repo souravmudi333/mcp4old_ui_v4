@@ -1,0 +1,646 @@
+# -*- coding: utf-8 -*-
+"""Location: ./mcpgateway/services/permission_service.py
+Copyright 2025
+SPDX-License-Identifier: Apache-2.0
+Authors: Mihai Criveti
+
+Permission Service for RBAC System.
+
+This module provides the core permission checking logic for the RBAC system.
+It handles role-based permission validation, permission auditing, and caching.
+"""
+
+# Standard
+from datetime import datetime
+import logging
+from typing import Dict, List, Optional, Set
+
+# Third-Party
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
+
+# First-Party
+from mcpgateway.db import PermissionAuditLog, Permissions, Role, UserRole, utc_now
+
+logger = logging.getLogger(__name__)
+
+
+class PermissionService:
+    """Service for checking and managing user permissions.
+
+    Provides role-based permission checking with caching, auditing,
+    and support for global, team, and personal scopes.
+
+    Attributes:
+        db: Database session
+        audit_enabled: Whether to log permission checks
+        cache_ttl: Permission cache TTL in seconds
+
+    Examples:
+        Basic construction and coroutine checks:
+        >>> from unittest.mock import Mock
+        >>> service = PermissionService(Mock())
+        >>> isinstance(service, PermissionService)
+        True
+        >>> import asyncio
+        >>> asyncio.iscoroutinefunction(service.check_permission)
+        True
+        >>> asyncio.iscoroutinefunction(service.get_user_permissions)
+        True
+    """
+
+    def __init__(self, db: Session, audit_enabled: bool = True):
+        """Initialize permission service.
+
+        Args:
+            db: Database session
+            audit_enabled: Whether to enable permission auditing
+        """
+        self.db = db
+        self.audit_enabled = audit_enabled
+        self._permission_cache: Dict[str, Set[str]] = {}
+        self._cache_timestamps: Dict[str, datetime] = {}
+        self.cache_ttl = 300  # 5 minutes
+
+    async def get_user_permissions(
+        self,
+        user_email: str,
+        *,
+        team_id: Optional[str] = None,
+        is_platform_admin: bool = False,
+        include_wildcard: bool = True,
+    ) -> Set[str]:
+        """
+        Return ALL effective permissions for a user (union across roles).
+        Used for UI gating / introspection / debugging.
+        """
+
+        # ✅ platform admin shortcut
+        if is_platform_admin and include_wildcard:
+            return {"*"}
+
+        now = datetime.now(timezone.utc)
+
+        # 1) Get active roles for the user (optionally in team scope)
+        q = (
+            self.db.query(UserRole)
+            .filter(UserRole.user_email == user_email)
+            .filter(UserRole.is_active.is_(True))
+        )
+
+        # If your RBAC supports scopes: global/team/personal
+        # Apply team filter only when team_id is provided
+        if team_id:
+            # Typical pattern: scope="team" and scope_id=team_id
+            q = q.filter(
+                (UserRole.scope == "team") & (UserRole.scope_id == str(team_id))
+                |
+                (UserRole.scope == "global")
+                |
+                (UserRole.scope == "personal")
+            )
+
+        # handle expiry if your schema has it
+        if hasattr(UserRole, "expires_at"):
+            q = q.filter((UserRole.expires_at.is_(None)) | (UserRole.expires_at > now))
+
+        user_roles = q.all()
+        if not user_roles:
+            return set()
+
+        role_ids = [ur.role_id for ur in user_roles if getattr(ur, "role_id", None)]
+        if not role_ids:
+            return set()
+
+        # 2) Fetch permissions for those roles
+        pq = self.db.query(RolePermission).filter(RolePermission.role_id.in_(role_ids))
+
+        # If your RolePermission has is_active
+        if hasattr(RolePermission, "is_active"):
+            pq = pq.filter(RolePermission.is_active.is_(True))
+
+        rows = pq.all()
+
+        perms: Set[str] = set()
+        for row in rows:
+            p = getattr(row, "permission", None)
+            if p:
+                perms.add(str(p))
+
+        return perms
+
+    async def check_permission(
+        self,
+        user_email: str,
+        permission: str,
+        resource_type: Optional[str] = None,
+        resource_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> bool:
+        """Check if user has specific permission.
+
+        Checks user's roles across all applicable scopes (global, team, personal)
+        and returns True if any role grants the required permission.
+
+        Args:
+            user_email: Email of the user to check
+            permission: Permission to check (e.g., 'tools.create')
+            resource_type: Type of resource being accessed
+            resource_id: Specific resource ID if applicable
+            team_id: Team context for the permission check
+            ip_address: IP address for audit logging
+            user_agent: User agent for audit logging
+
+        Returns:
+            bool: True if permission is granted, False otherwise
+
+        Examples:
+            Parameter validation helpers:
+            >>> permission = "users.read"
+            >>> permission.count('.') == 1
+            True
+            >>> team_id = "team-123"
+            >>> isinstance(team_id, str)
+            True
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> import asyncio
+            >>> asyncio.iscoroutinefunction(service.check_permission)
+            True
+        """
+        try:
+            # First check if user is admin (bypass all permission checks)
+            if await self._is_user_admin(user_email):
+                return True
+
+            # Get user's effective permissions from roles
+            user_permissions = list(await self.get_user_permissions(user_email, team_id))
+           
+            # Check if user has the specific permission or wildcard
+            granted = permission in user_permissions or Permissions.ALL_PERMISSIONS in user_permissions
+
+            # If no explicit permissions found, check fallback permissions for team operations
+            fallback_permissions = []
+            if permission.startswith("teams."):
+                fallback_permissions = await self._check_team_fallback_permissions(user_email, permission, team_id)
+
+            # Append fallback perms to RBAC perms list
+            user_permissions.extend(p for p in fallback_permissions if p not in user_permissions)
+
+            # Now check again
+            granted = permission in user_permissions
+
+            # Log the permission check if auditing is enabled
+            if self.audit_enabled:
+                await self._log_permission_check(
+                    user_email=user_email,
+                    permission=permission,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    team_id=team_id,
+                    granted=granted,
+                    roles_checked=await self._get_roles_for_audit(user_email, team_id),
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+
+            logger.debug(f"Permission check: user={user_email}, permission={permission}, team={team_id}, granted={granted}")
+
+            return granted
+
+        except Exception as e:
+            logger.error(f"Error checking permission for {user_email}: {e}")
+            # Default to deny on error
+            return False
+
+    # async def check_permission(
+    #     self,
+    #     user_email: str,
+    #     permission: str,
+    #     resource_type: Optional[str] = None,
+    #     resource_id: Optional[str] = None,
+    #     team_id: Optional[str] = None,
+    #     ip_address: Optional[str] = None,
+    #     user_agent: Optional[str] = None,
+    # ) -> bool:
+    #     """Instrumented permission check with debug logging to diagnose failures."""
+    #     try:
+    #         logger.debug(
+    #             "check_permission START: user=%s permission=%s resource_type=%s resource_id=%s team_id=%s ip=%s ua=%s",
+    #             user_email, permission, resource_type, resource_id, team_id, ip_address, user_agent
+    #         )
+
+    #         # 1) Admin shortcut
+    #         is_admin = await self._is_user_admin(user_email)
+    #         logger.debug("check_permission: is_admin=%s for user=%s", is_admin, user_email)
+    #         if is_admin:
+    #             return True
+
+    #         # 2) Get user's effective permissions
+    #         user_permissions = await self.get_user_permissions(user_email, team_id)
+    #         # Defensive: ensure it's iterable
+    #         if user_permissions is None:
+    #             user_permissions = set()
+    #         logger.debug("check_permission: user_permissions for %s (team=%s) = %s", user_email, team_id, list(user_permissions)[:50])
+
+    #         # 3) Direct match or wildcard
+    #         wildcard_present = Permissions.ALL_PERMISSIONS in user_permissions
+    #         direct_match = permission in user_permissions
+    #         logger.debug("check_permission: direct_match=%s wildcard_present=%s", direct_match, wildcard_present)
+
+    #         granted = direct_match or wildcard_present
+
+    #         # 4) Team fallback for teams.* if still not granted
+    #         fallback_result = False
+    #         if not granted and permission.startswith("teams."):
+    #             fallback_result = await self._check_team_fallback_permissions(user_email, permission, team_id)
+    #             logger.debug("check_permission: team_fallback_result=%s for permission=%s team_id=%s", fallback_result, permission, team_id)
+    #             granted = granted or fallback_result
+
+    #         # 5) Audit roles (but still log even if audit disabled)
+    #         try:
+    #             roles_for_audit = await self._get_roles_for_audit(user_email, team_id)
+    #         except Exception as e:
+    #             roles_for_audit = None
+    #             logger.exception("check_permission: failed to get roles_for_audit for %s team=%s: %s", user_email, team_id, e)
+
+    #         # 6) Audit log if enabled (keeps original behavior)
+    #         if self.audit_enabled:
+    #             await self._log_permission_check(
+    #                 user_email=user_email,
+    #                 permission=permission,
+    #                 resource_type=resource_type,
+    #                 resource_id=resource_id,
+    #                 team_id=team_id,
+    #                 granted=granted,
+    #                 roles_checked=roles_for_audit,
+    #                 ip_address=ip_address,
+    #                 user_agent=user_agent,
+    #             )
+
+    #         logger.debug(
+    #             "check_permission END: user=%s permission=%s team=%s granted=%s roles=%s fallback=%s",
+    #             user_email, permission, team_id, granted, roles_for_audit, fallback_result
+    #         )
+
+    #         return granted
+
+    #     except Exception as e:
+    #         # Log the full exception + stack so we can see unexpected errors
+    #         logger.exception("Error checking permission for %s (permission=%s, team=%s): %s", user_email, permission, team_id, e)
+    #         # Default to deny on error (keep current behavior)
+    #         return False
+
+
+    async def get_user_permissions(
+        self,
+        user_email: str,
+        team_id: Optional[str] = None,
+        *,
+        is_platform_admin: bool = False,
+    ) -> Set[str]:
+        """Get all effective permissions for a user."""
+        
+        # 🔐 Admin short-circuit (must be BEFORE cache)
+        if is_platform_admin:
+            # Admin gets everything
+            return set(Permissions.get_all_permissions())
+
+        # Cache key (non-admin path)
+        cache_key = f"{user_email}:{team_id or 'global'}"
+        if self._is_cache_valid(cache_key):
+            return self._permission_cache[cache_key]
+
+        permissions = set()
+
+        # Get all active roles for the user
+        user_roles = await self._get_user_roles(user_email, team_id)
+
+        # Collect permissions from all roles
+        for user_role in user_roles:
+            role_permissions = user_role.role.get_effective_permissions()
+            permissions.update(role_permissions)
+
+        # Cache the result
+        self._permission_cache[cache_key] = permissions
+        self._cache_timestamps[cache_key] = utc_now()
+
+        return permissions
+
+    async def get_user_roles(self, user_email: str, scope: Optional[str] = None, team_id: Optional[str] = None, include_expired: bool = False) -> List[UserRole]:
+        """Get user's role assignments.
+
+        Args:
+            user_email: Email of the user
+            scope: Filter by scope ('global', 'team', 'personal')
+            team_id: Filter by team ID
+            include_expired: Whether to include expired roles
+
+        Returns:
+            List[UserRole]: User's role assignments
+
+        Examples:
+            Coroutine check:
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> import asyncio
+            >>> asyncio.iscoroutinefunction(service.get_user_roles)
+            True
+        """
+        query = select(UserRole).join(Role).where(and_(UserRole.user_email == user_email, UserRole.is_active.is_(True), Role.is_active.is_(True)))
+
+        if scope:
+            query = query.where(UserRole.scope == scope)
+
+        if team_id:
+            query = query.where(UserRole.scope_id == team_id)
+
+        if not include_expired:
+            now = utc_now()
+            query = query.where((UserRole.expires_at.is_(None)) | (UserRole.expires_at > now))
+
+        result = self.db.execute(query)
+        return result.scalars().all()
+
+    async def has_permission_on_resource(self, user_email: str, permission: str, resource_type: str, resource_id: str, team_id: Optional[str] = None) -> bool:
+        """Check if user has permission on a specific resource.
+
+        This method can be extended to include resource-specific
+        permission logic (e.g., resource ownership, sharing rules).
+
+        Args:
+            user_email: Email of the user
+            permission: Permission to check
+            resource_type: Type of resource
+            resource_id: Specific resource ID
+            team_id: Team context
+
+        Returns:
+            bool: True if user has permission on the resource
+
+        Examples:
+            Coroutine check and parameter sanity:
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> import asyncio
+            >>> asyncio.iscoroutinefunction(service.has_permission_on_resource)
+            True
+            >>> res_type, res_id = "tools", "tool-123"
+            >>> all(isinstance(x, str) for x in (res_type, res_id))
+            True
+        """
+        # Basic permission check
+        if not await self.check_permission(user_email=user_email, permission=permission, resource_type=resource_type, resource_id=resource_id, team_id=team_id):
+            return False
+
+        # NOTE: Add resource-specific logic here in future enhancement
+        # For example:
+        # - Check resource ownership
+        # - Check resource sharing permissions
+        # - Check resource team membership
+
+        return True
+
+    async def check_admin_permission(self, user_email: str) -> bool:
+        """Check if user has any admin permissions.
+
+        Args:
+            user_email: Email of the user
+
+        Returns:
+            bool: True if user has admin permissions
+
+        Examples:
+            Coroutine check:
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> import asyncio
+            >>> asyncio.iscoroutinefunction(service.check_admin_permission)
+            True
+        """
+        # First check if user is admin (handles platform admin virtual user)
+        if await self._is_user_admin(user_email):
+            return True
+
+        admin_permissions = [Permissions.ADMIN_SYSTEM_CONFIG, Permissions.ADMIN_USER_MANAGEMENT, Permissions.ADMIN_SECURITY_AUDIT, Permissions.ALL_PERMISSIONS]
+
+        user_permissions = await self.get_user_permissions(user_email)
+        return any(perm in user_permissions for perm in admin_permissions)
+
+    def clear_user_cache(self, user_email: str) -> None:
+        """Clear cached permissions for a user.
+
+        Should be called when user's roles change.
+
+        Args:
+            user_email: Email of the user
+
+        Examples:
+            Cache invalidation behavior:
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> service._permission_cache = {"alice:global": {"tools.read"}, "bob:team1": {"*"}}
+            >>> service._cache_timestamps = {"alice:global": utc_now(), "bob:team1": utc_now()}
+            >>> service.clear_user_cache("alice")
+            >>> "alice:global" in service._permission_cache
+            False
+            >>> "bob:team1" in service._permission_cache
+            True
+        """
+        keys_to_remove = [key for key in self._permission_cache if key.startswith(f"{user_email}:")]
+
+        for key in keys_to_remove:
+            self._permission_cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+
+        logger.debug(f"Cleared permission cache for user: {user_email}")
+
+    def clear_cache(self) -> None:
+        """Clear all cached permissions.
+
+        Examples:
+            Clear all cache:
+            >>> from unittest.mock import Mock
+            >>> service = PermissionService(Mock())
+            >>> service._permission_cache = {"x": {"p"}}
+            >>> service._cache_timestamps = {"x": utc_now()}
+            >>> service.clear_cache()
+            >>> service._permission_cache == {}
+            True
+            >>> service._cache_timestamps == {}
+            True
+        """
+        self._permission_cache.clear()
+        self._cache_timestamps.clear()
+        logger.debug("Cleared all permission cache")
+
+    async def _get_user_roles(self, user_email: str, team_id: Optional[str] = None) -> List[UserRole]:
+        """Get user roles for permission checking.
+
+        Includes global roles and team-specific roles if team_id is provided.
+
+        Args:
+            user_email: Email address of the user
+            team_id: Optional team ID to include team-specific roles
+
+        Returns:
+            List[UserRole]: List of active roles for the user
+        """
+        query = select(UserRole).join(Role).where(and_(UserRole.user_email == user_email, UserRole.is_active.is_(True), Role.is_active.is_(True)))
+
+        # Include global roles and team-specific roles
+        scope_conditions = [UserRole.scope == "global", UserRole.scope == "personal"]
+
+        if team_id:
+            scope_conditions.append(and_(UserRole.scope == "team", UserRole.scope_id == team_id))
+
+        query = query.where(or_(*scope_conditions))
+
+        # Filter out expired roles
+        now = utc_now()
+        query = query.where((UserRole.expires_at.is_(None)) | (UserRole.expires_at > now))
+
+        result = self.db.execute(query)
+        return result.scalars().all()
+
+    async def _log_permission_check(
+        self,
+        user_email: str,
+        permission: str,
+        resource_type: Optional[str],
+        resource_id: Optional[str],
+        team_id: Optional[str],
+        granted: bool,
+        roles_checked: Dict,
+        ip_address: Optional[str],
+        user_agent: Optional[str],
+    ) -> None:
+        """Log permission check for auditing.
+
+        Args:
+            user_email: Email address of the user
+            permission: Permission being checked
+            resource_type: Type of resource being accessed
+            resource_id: ID of specific resource
+            team_id: ID of team context
+            granted: Whether permission was granted
+            roles_checked: Dictionary of roles that were checked
+            ip_address: IP address of request
+            user_agent: User agent of request
+        """
+        audit_log = PermissionAuditLog(
+            user_email=user_email,
+            permission=permission,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            team_id=team_id,
+            granted=granted,
+            roles_checked=roles_checked,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        self.db.add(audit_log)
+        self.db.commit()
+
+    async def _get_roles_for_audit(self, user_email: str, team_id: Optional[str]) -> Dict:
+        """Get role information for audit logging.
+
+        Args:
+            user_email: Email address of the user
+            team_id: Optional team ID for context
+
+        Returns:
+            Dict: Role information for audit logging
+        """
+        user_roles = await self._get_user_roles(user_email, team_id)
+        return {"roles": [{"id": ur.role_id, "name": ur.role.name, "scope": ur.scope, "permissions": ur.role.permissions} for ur in user_roles]}
+
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cached permissions are still valid.
+
+        Args:
+            cache_key: Cache key to check validity for
+
+        Returns:
+            bool: True if cache is valid, False otherwise
+        """
+        if cache_key not in self._permission_cache:
+            return False
+
+        if cache_key not in self._cache_timestamps:
+            return False
+
+        age = utc_now() - self._cache_timestamps[cache_key]
+        return age.total_seconds() < self.cache_ttl
+
+    async def _is_user_admin(self, user_email: str) -> bool:
+        """Check if user is admin by looking up user record directly.
+
+        Args:
+            user_email: Email address of the user
+
+        Returns:
+            bool: True if user is admin
+        """
+        # First-Party
+        from mcpgateway.config import settings  # pylint: disable=import-outside-toplevel
+        from mcpgateway.db import EmailUser  # pylint: disable=import-outside-toplevel
+
+        # Special case for platform admin (virtual user)
+        if user_email == getattr(settings, "platform_admin_email", ""):
+            return True
+
+        user = self.db.execute(select(EmailUser).where(EmailUser.email == user_email)).scalar_one_or_none()
+        return bool(user and user.is_admin)
+
+    async def _check_team_fallback_permissions(self, user_email: str, permission: str, team_id: Optional[str]) -> list[str]:
+        """Return fallback permissions for this user on this team."""
+
+        # Get user's role in the team
+        user_role = await self._get_user_team_role(user_email, team_id)
+
+        # Fallback permissions per role
+        if user_role == "owner":
+            return ["teams.read", "teams.update", "teams.delete", "teams.manage_members"]
+
+        if user_role == "member":
+            return ["teams.read"]
+
+        return []
+    
+    async def _is_team_member(self, user_email: str, team_id: str) -> bool:
+        """Check if user is a member of the specified team.
+
+        Args:
+            user_email: Email address of the user
+            team_id: Team ID
+
+        Returns:
+            bool: True if user is a team member
+        """
+        # First-Party
+        from mcpgateway.db import EmailTeamMember  # pylint: disable=import-outside-toplevel
+
+        member = self.db.execute(select(EmailTeamMember).where(and_(EmailTeamMember.user_email == user_email, EmailTeamMember.team_id == team_id, EmailTeamMember.is_active))).scalar_one_or_none()
+
+        return member is not None
+
+    async def _get_user_team_role(self, user_email: str, team_id: str) -> Optional[str]:
+        """Get user's role in the specified team.
+
+        Args:
+            user_email: Email address of the user
+            team_id: Team ID
+
+        Returns:
+            Optional[str]: User's role in the team or None if not a member
+        """
+        # First-Party
+        from mcpgateway.db import EmailTeamMember  # pylint: disable=import-outside-toplevel
+
+        member = self.db.execute(select(EmailTeamMember).where(and_(EmailTeamMember.user_email == user_email, EmailTeamMember.team_id == team_id, EmailTeamMember.is_active))).scalar_one_or_none()
+
+        return member.role if member else None
