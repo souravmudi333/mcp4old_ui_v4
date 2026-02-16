@@ -4752,19 +4752,35 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               </div>
             </div>
 
-            <button
-              id="create-team-btn"
-              type="button"
-              onclick="openCreateTeamModal()"
-              class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-[#2561C1] text-white hover:bg-[#1f56ad] transition-all shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 8v8M8 12h8"></path>
-              </svg>
-              <span>Create Team</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                id="refresh-team-btn"
+                type="button"
+                onclick="refreshTeamsPanel()"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-all shadow-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+                  <path d="M21 3v6h-6"/>
+                </svg>
+                <span>Refresh</span>
+              </button>
+
+              <button
+                id="create-team-btn"
+                type="button"
+                onclick="openCreateTeamModal()"
+                class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-[#2561C1] text-white hover:bg-[#1f56ad] transition-all shadow-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 8v8M8 12h8"></path>
+                </svg>
+                <span>Create Team</span>
+              </button>
+            </div>
           </div>
 
           <div class="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-4">

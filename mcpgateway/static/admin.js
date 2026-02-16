@@ -14216,7 +14216,20 @@ function renderTeamMembersModal(members, canManage, options = {}) {
       ${
         canShowActions
           ? `
-            <div class="mb-4 flex items-center justify-end">
+            <div class="mb-4 flex items-center justify-end gap-2">
+              ${
+                teamVisibility === "public"
+                  ? `
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-[#2561C1] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                      onclick="openJoinRequestsFromManage('${escapeHtml(teamId)}')"
+                    >
+                      Join Requests
+                    </button>
+                  `
+                  : ""
+              }
               <button
                 type="button"
                 class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-[#2561C1] hover:bg-[#1f56ad] text-white shadow-sm"
@@ -14572,6 +14585,12 @@ function onTeamFilterClick(button, type) {
 
   // 3️⃣ load data
   loadTeamsByRelationship(type);
+}
+
+function refreshTeamsPanel() {
+  const activeFilterBtn = document.querySelector('.filter-btn.active');
+  const activeType = activeFilterBtn?.dataset?.filter || 'all';
+  loadTeamsByRelationship(activeType);
 }
 
 function loadTeamsByRelationship(type) {
@@ -15079,7 +15098,7 @@ async function loadInviteUserDropdown(teamId) {
     select.innerHTML = `<option value="">Loading users...</option>`;
 
     const [usersRes, membersRes] = await Promise.all([
-      fetch(`${window.ROOT_PATH}/admin/users?format=json`, {
+      fetch(`${window.ROOT_PATH}/teams/${teamId}/invite-candidates`, {
         credentials: "same-origin",
         headers: {
           Accept: "application/json",

@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 # First-Party
 from mcpgateway.auth import get_current_user
-from mcpgateway.db import get_db, EmailTeamMember, EmailTeam, EmailTeamJoinRequest
+from mcpgateway.db import get_db, EmailTeamMember, EmailTeam, EmailTeamJoinRequest, EmailUser
 from mcpgateway.middleware.rbac import get_current_user_with_permissions, require_permission
 from mcpgateway.schemas import (
     EmailUserResponse,
@@ -757,6 +757,52 @@ async def list_team_invitations(
     except Exception as e:
         logger.error(f"Error listing team invitations for team {team_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list invitations")
+
+
+@teams_router.get("/{team_id}/invite-candidates")
+@require_permission("teams.manage_members")
+async def list_team_invite_candidates(
+    team_id: str,
+    current_user_ctx: dict = Depends(get_current_user_with_permissions),
+) -> JSONResponse:
+    """List active users for team invite dropdown (team-scoped permissions)."""
+    try:
+        db: Session = current_user_ctx["db"]
+        team_service = TeamManagementService(db)
+
+        team = await team_service.get_team_by_id(team_id)
+        if team is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+
+        is_admin = bool(current_user_ctx.get("is_admin", False))
+        if not is_admin:
+            user_role = await team_service.get_user_role_in_team(current_user_ctx["email"], team_id)
+            if user_role != "owner":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only team owners can invite members")
+
+        users = (
+            db.query(EmailUser)
+            .filter(EmailUser.is_active.is_(True))
+            .order_by(EmailUser.full_name.asc().nulls_last(), EmailUser.email.asc())
+            .all()
+        )
+
+        users_data = [
+            {
+                "email": u.email,
+                "full_name": u.full_name,
+                "is_active": u.is_active,
+                "is_admin": u.is_admin,
+            }
+            for u in users
+            if u.email
+        ]
+        return JSONResponse(content={"users": users_data})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing invite candidates for team {team_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load invite candidates")
 
 #------------------------
 # Accept team invitation testing
