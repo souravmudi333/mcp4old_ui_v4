@@ -75,7 +75,7 @@ from mcpgateway.db import Resource as DbResource
 from mcpgateway.db import SessionLocal
 from mcpgateway.db import Tool as DbTool
 from mcpgateway.observability import create_span
-from mcpgateway.schemas import GatewayCreate, GatewayRead, GatewayUpdate, PromptCreate, ResourceCreate, ToolCreate
+from mcpgateway.schemas import GatewayCreate, GatewayRead, GatewayUpdate, PromptCreate, ResourceCreate, ToolCreate, TopPerformer
 
 # logging.getLogger("httpx").setLevel(logging.WARNING)  # Disables httpx logs for regular health checks
 from mcpgateway.services.logging_service import LoggingService
@@ -2647,3 +2647,251 @@ class GatewayService:  # pylint: disable=too-many-instance-attributes
                         logger.warning(f"Failed to fetch prompts: {e}")
 
                 return capabilities, tools, resources, prompts
+
+    # --- Metrics Methods ---
+
+    async def get_top_gateways(self, db: Session, limit: int = 5) -> List[TopPerformer]:
+        """Retrieve the top-performing gateways based on execution count.
+
+        Queries the database to get gateways with their metrics, ordered by the number of executions
+        in descending order. Returns a list of TopPerformer objects containing gateway details and
+        performance metrics.
+
+        Args:
+            db (Session): Database session for querying gateway metrics.
+            limit (int): Maximum number of gateways to return. Defaults to 5.
+
+        Returns:
+            List[TopPerformer]: A list of TopPerformer objects, each containing:
+                - id: Gateway ID.
+                - name: Gateway name.
+                - execution_count: Total number of executions.
+                - avg_response_time: Average response time in seconds, or None if no metrics.
+                - success_rate: Success rate percentage, or None if no metrics.
+                - last_execution: Timestamp of the last execution, or None if no metrics.
+        """
+        from sqlalchemy import func, case, desc, Float, text
+        from mcpgateway.db import GatewayMetric
+        from mcpgateway.utils.metrics_common import build_top_performers
+
+        # Check if gateway_metrics table exists, if not create it
+        try:
+            result = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='gateway_metrics'"))
+            table_exists = result.fetchone() is not None
+            
+            if not table_exists:
+                logger.warning("gateway_metrics table does not exist, creating it now...")
+                try:
+                    db.execute(text("""
+                        CREATE TABLE IF NOT EXISTS gateway_metrics (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            gateway_id VARCHAR(36) NOT NULL,
+                            timestamp DATETIME NOT NULL,
+                            response_time FLOAT NOT NULL,
+                            is_success BOOLEAN NOT NULL,
+                            error_message TEXT,
+                            FOREIGN KEY(gateway_id) REFERENCES gateways(id)
+                        )
+                    """))
+                    db.execute(text("CREATE INDEX IF NOT EXISTS ix_gateway_metrics_gateway_id ON gateway_metrics(gateway_id)"))
+                    db.execute(text("CREATE INDEX IF NOT EXISTS ix_gateway_metrics_timestamp ON gateway_metrics(timestamp)"))
+                    db.commit()
+                    logger.info("gateway_metrics table created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create gateway_metrics table: {e}")
+                    db.rollback()
+                    # Return empty list if table can't be created
+                    return []
+        except Exception as e:
+            logger.error(f"Error checking table existence: {e}")
+            return []
+
+        try:
+            results = (
+                db.query(
+                    DbGateway.id,
+                    DbGateway.name,
+                    func.count(GatewayMetric.id).label("execution_count"),
+                    func.avg(GatewayMetric.response_time).label("avg_response_time"),
+                    case(
+                        (
+                            func.count(GatewayMetric.id) > 0,
+                            func.sum(case((GatewayMetric.is_success.is_(True), 1), else_=0)).cast(Float) / func.count(GatewayMetric.id) * 100,
+                        ),
+                        else_=None,
+                    ).label("success_rate"),
+                    func.max(GatewayMetric.timestamp).label("last_execution"),
+                )
+                .outerjoin(GatewayMetric)
+                .group_by(DbGateway.id, DbGateway.name)
+                .order_by(desc("execution_count"))
+                .limit(limit)
+                .all()
+            )
+
+            return build_top_performers(results)
+        except Exception as e:
+            logger.error(f"Error querying gateway metrics: {e}")
+            return []
+
+    async def aggregate_metrics(self, db: Session):
+        """Aggregate metrics for all gateways.
+
+        Computes overall statistics across all gateway test executions.
+
+        Args:
+            db (Session): Database session for querying metrics.
+
+        Returns:
+            GatewayMetrics: Aggregated metrics computed from all GatewayMetric records.
+        """
+        from sqlalchemy import func, select, delete, text
+        from mcpgateway.db import GatewayMetric
+        from mcpgateway.schemas import ServerMetrics  # Reuse ServerMetrics schema for consistency
+
+        # Check if gateway_metrics table exists, if not return empty metrics
+        try:
+            result = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='gateway_metrics'"))
+            table_exists = result.fetchone() is not None
+            
+            if not table_exists:
+                logger.warning("gateway_metrics table does not exist, returning empty metrics")
+                return ServerMetrics(
+                    total_executions=0,
+                    successful_executions=0,
+                    failed_executions=0,
+                    failure_rate=0.0,
+                    min_response_time=None,
+                    max_response_time=None,
+                    avg_response_time=None,
+                    last_execution_time=None,
+                )
+        except Exception as e:
+            logger.error(f"Error checking gateway_metrics table existence: {e}")
+            return ServerMetrics(
+                total_executions=0,
+                successful_executions=0,
+                failed_executions=0,
+                failure_rate=0.0,
+                min_response_time=None,
+                max_response_time=None,
+                avg_response_time=None,
+                last_execution_time=None,
+            )
+
+        try:
+            total_executions = db.execute(select(func.count()).select_from(GatewayMetric)).scalar() or 0
+            successful_executions = db.execute(select(func.count()).select_from(GatewayMetric).where(GatewayMetric.is_success.is_(True))).scalar() or 0
+            failed_executions = db.execute(select(func.count()).select_from(GatewayMetric).where(GatewayMetric.is_success.is_(False))).scalar() or 0
+            min_response_time = db.execute(select(func.min(GatewayMetric.response_time))).scalar()
+            max_response_time = db.execute(select(func.max(GatewayMetric.response_time))).scalar()
+            avg_response_time = db.execute(select(func.avg(GatewayMetric.response_time))).scalar()
+            last_execution_time = db.execute(select(func.max(GatewayMetric.timestamp))).scalar()
+
+            failure_rate = (failed_executions / total_executions) if total_executions > 0 else 0.0
+
+            return ServerMetrics(
+                total_executions=total_executions,
+                successful_executions=successful_executions,
+                failed_executions=failed_executions,
+                failure_rate=failure_rate,
+                min_response_time=min_response_time,
+                max_response_time=max_response_time,
+                avg_response_time=avg_response_time,
+                last_execution_time=last_execution_time,
+            )
+        except Exception as e:
+            logger.error(f"Error aggregating gateway metrics: {e}")
+            return ServerMetrics(
+                total_executions=0,
+                successful_executions=0,
+                failed_executions=0,
+                failure_rate=0.0,
+                min_response_time=None,
+                max_response_time=None,
+                avg_response_time=None,
+                last_execution_time=None,
+            )
+
+    async def _record_gateway_metric(
+        self,
+        db: Session,
+        gateway: DbGateway,
+        start_time: float,
+        success: bool,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Records a metric for a gateway test execution.
+
+        Args:
+            db (Session): The SQLAlchemy database session.
+            gateway (DbGateway): The gateway that was tested.
+            start_time (float): The monotonic start time of the test.
+            success (bool): True if all tests succeeded; otherwise, False.
+            error_message (Optional[str]): The error message if any test failed, otherwise None.
+        """
+        import time
+        from sqlalchemy import text
+        from mcpgateway.db import GatewayMetric
+
+        # Check if gateway_metrics table exists, if not create it
+        try:
+            db.execute(text("SELECT 1 FROM gateway_metrics LIMIT 1"))
+        except Exception:
+            logger.warning("gateway_metrics table does not exist, creating it now...")
+            try:
+                db.execute(text("""
+                    CREATE TABLE IF NOT EXISTS gateway_metrics (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        gateway_id VARCHAR(36) NOT NULL,
+                        timestamp DATETIME NOT NULL,
+                        response_time FLOAT NOT NULL,
+                        is_success BOOLEAN NOT NULL,
+                        error_message TEXT,
+                        FOREIGN KEY(gateway_id) REFERENCES gateways(id)
+                    )
+                """))
+                db.execute(text("CREATE INDEX IF NOT EXISTS ix_gateway_metrics_gateway_id ON gateway_metrics(gateway_id)"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS ix_gateway_metrics_timestamp ON gateway_metrics(timestamp)"))
+                db.commit()
+                logger.info("gateway_metrics table created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create gateway_metrics table: {e}")
+                db.rollback()
+                return
+
+        try:
+            end_time = time.monotonic()
+            response_time = end_time - start_time
+            metric = GatewayMetric(
+                gateway_id=gateway.id,
+                response_time=response_time,
+                is_success=success,
+                error_message=error_message,
+            )
+            db.add(metric)
+            db.commit()
+            logger.info(f"Gateway metric recorded: gateway_id={gateway.id}, success={success}, response_time={response_time:.3f}s")
+        except Exception as e:
+            logger.error(f"Failed to record gateway metric: {e}")
+            db.rollback()
+
+    async def reset_metrics(self, db: Session) -> None:
+        """Reset all gateway metrics by deleting all records from the gateway metrics table.
+
+        Args:
+            db: Database session
+        """
+        from sqlalchemy import delete, text
+        from mcpgateway.db import GatewayMetric
+
+        # Check if gateway_metrics table exists
+        try:
+            db.execute(text("SELECT 1 FROM gateway_metrics LIMIT 1"))
+            db.execute(delete(GatewayMetric))
+            db.commit()
+            logger.info("Gateway metrics reset successfully")
+        except Exception as e:
+            logger.warning(f"Gateway metrics table may not exist or reset failed: {e}")
+            db.rollback()
+

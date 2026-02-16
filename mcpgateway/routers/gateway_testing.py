@@ -194,15 +194,31 @@ async def bulk_test_gateway_tools(
         * verify it belongs to this gateway
         * build the JSON-RPC envelope internally
         * call ToolService.invoke_tool
+    - Records GatewayMetric for test execution to track in Top Performers
     """
+    import time
+    from mcpgateway.db import Gateway as DbGateway
+    from mcpgateway.services.gateway_service import GatewayService
+    
     tool_service = ToolService()
+    gateway_service = GatewayService()
 
     # user can be object or dict
     user_email = getattr(user, "email", None)
     if user_email is None and isinstance(user, dict):
         user_email = user.get("email", "unknown")
 
+    # Get the gateway
+    gateway: DbGateway = db.get(DbGateway, gateway_id)
+    if not gateway:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Gateway {gateway_id} not found",
+        )
+
+    test_start_time = time.monotonic()
     results: List[SingleToolTestResult] = []
+    all_tests_successful = True
 
     for test in body.tests:
         # We'll fill this in below so we can always append something, even on errors
@@ -260,11 +276,16 @@ async def bulk_test_gateway_tools(
 
             result_payload = tool_result.model_dump(by_alias=True, mode="json")
             success = not result_payload.get("is_error", False)
+            
+            if not success:
+                all_tests_successful = False
 
         except HTTPException as http_exc:
             error_msg = http_exc.detail if isinstance(http_exc.detail, str) else str(http_exc.detail)
+            all_tests_successful = False
         except Exception as exc:  # pragma: no cover - defensive logging
             error_msg = str(exc)
+            all_tests_successful = False
 
         results.append(
             SingleToolTestResult(
@@ -276,6 +297,22 @@ async def bulk_test_gateway_tools(
                 error=error_msg,
             )
         )
+
+    # Record GatewayMetric after all tests complete
+    try:
+        await gateway_service._record_gateway_metric(
+            db=db,
+            gateway=gateway,
+            start_time=test_start_time,
+            success=all_tests_successful,
+            error_message=None if all_tests_successful else "One or more tool tests failed",
+        )
+        logger.info(
+            f"Recorded GatewayMetric for gateway {gateway.name} (id {gateway.id}): "
+            f"{'success' if all_tests_successful else 'partial failure'}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to record GatewayMetric for gateway {gateway_id}: {e}")
 
     return BulkToolTestResponse(
         gateway_id=gateway_id,

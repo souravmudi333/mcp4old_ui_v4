@@ -7187,16 +7187,38 @@ async def get_aggregated_metrics(
             - 'topPerformers': A nested dictionary with top 5 tools, resources, prompts,
               and servers.
     """
+    # Keep the metrics endpoint resilient even if gateway metrics schema is not yet initialized.
+    try:
+        gateway_metrics = await gateway_service.aggregate_metrics(db)
+    except Exception as exc:  # pragma: no cover - defensive safeguard for UI availability
+        LOGGER.error(f"Failed to aggregate gateway metrics: {exc}")
+        gateway_metrics = ServerMetrics(
+            total_executions=0,
+            successful_executions=0,
+            failed_executions=0,
+            failure_rate=0.0,
+            min_response_time=None,
+            max_response_time=None,
+            avg_response_time=None,
+            last_execution_time=None,
+        )
+
+    try:
+        top_gateways = await gateway_service.get_top_gateways(db, limit=5)
+    except Exception as exc:  # pragma: no cover - defensive safeguard for UI availability
+        LOGGER.error(f"Failed to fetch top gateways: {exc}")
+        top_gateways = []
+
     metrics = {
         "tools": await tool_service.aggregate_metrics(db),
         "resources": await resource_service.aggregate_metrics(db),
         "prompts": await prompt_service.aggregate_metrics(db),
-        "servers": await server_service.aggregate_metrics(db),
+        "servers": gateway_metrics,
         "topPerformers": {
             "tools": await tool_service.get_top_tools(db, limit=5),
             "resources": await resource_service.get_top_resources(db, limit=5),
             "prompts": await prompt_service.get_top_prompts(db, limit=5),
-            "servers": await server_service.get_top_servers(db, limit=5),
+            "servers": top_gateways,
         },
     }
     return metrics
@@ -7249,6 +7271,7 @@ async def admin_reset_metrics(db: Session = Depends(get_db), user=Depends(get_cu
     await resource_service.reset_metrics(db)
     await server_service.reset_metrics(db)
     await prompt_service.reset_metrics(db)
+    await gateway_service.reset_metrics(db)
     return {"message": "All metrics reset successfully", "success": True}
 
 
