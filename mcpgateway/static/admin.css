@@ -175,6 +175,601 @@
 }
 
 /* =======================================================
+  GATEWAY MODALS (VIEW / TEST / EDIT)
+======================================================= */
+
+#gateway-modal .gw-modal-card,
+#gateway-bulk-test-modal .gw-modal-card,
+#gateway-edit-modal .gw-modal-card,
+#tool-modal .gw-modal-card,
+#tool-test-modal .gw-modal-card,
+#tool-edit-modal .gw-modal-card,
+#server-modal .gw-modal-card,
+#server-edit-modal .gw-modal-card,
+#config-selection-modal .gw-modal-card,
+#config-display-modal .gw-modal-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+}
+
+.dark #gateway-modal .gw-modal-card,
+.dark #gateway-bulk-test-modal .gw-modal-card,
+.dark #gateway-edit-modal .gw-modal-card,
+.dark #tool-modal .gw-modal-card,
+.dark #tool-test-modal .gw-modal-card,
+.dark #tool-edit-modal .gw-modal-card,
+.dark #server-modal .gw-modal-card,
+.dark #server-edit-modal .gw-modal-card,
+.dark #config-selection-modal .gw-modal-card,
+.dark #config-display-modal .gw-modal-card {
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#gateway-modal .gw-modal-divider,
+#gateway-bulk-test-modal .gw-modal-divider,
+#gateway-edit-modal .gw-modal-divider,
+#tool-modal .gw-modal-divider,
+#tool-test-modal .gw-modal-divider,
+#tool-edit-modal .gw-modal-divider,
+#server-modal .gw-modal-divider,
+#server-edit-modal .gw-modal-divider,
+#config-selection-modal .gw-modal-divider,
+#config-display-modal .gw-modal-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.dark #gateway-modal .gw-modal-divider,
+.dark #gateway-bulk-test-modal .gw-modal-divider,
+.dark #gateway-edit-modal .gw-modal-divider,
+.dark #tool-modal .gw-modal-divider,
+.dark #tool-test-modal .gw-modal-divider,
+.dark #tool-edit-modal .gw-modal-divider,
+.dark #server-modal .gw-modal-divider,
+.dark #server-edit-modal .gw-modal-divider,
+.dark #config-selection-modal .gw-modal-divider,
+.dark #config-display-modal .gw-modal-divider {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+#gateway-modal .gw-modal-primary,
+#gateway-bulk-test-modal .gw-modal-primary,
+#gateway-edit-modal .gw-modal-primary,
+#tool-modal .gw-modal-primary,
+#tool-test-modal .gw-modal-primary,
+#tool-edit-modal .gw-modal-primary,
+#server-modal .gw-modal-primary,
+#server-edit-modal .gw-modal-primary,
+#config-selection-modal .gw-modal-primary,
+#config-display-modal .gw-modal-primary {
+  border: none;
+  border-radius: 12px;
+  background: #2561C1;
+  color: #ffffff;
+  transition: background-color 0.2s ease;
+}
+
+#gateway-modal .gw-modal-primary:hover,
+#gateway-bulk-test-modal .gw-modal-primary:hover,
+#gateway-edit-modal .gw-modal-primary:hover,
+#tool-modal .gw-modal-primary:hover,
+#tool-test-modal .gw-modal-primary:hover,
+#tool-edit-modal .gw-modal-primary:hover,
+#server-modal .gw-modal-primary:hover,
+#server-edit-modal .gw-modal-primary:hover,
+#config-selection-modal .gw-modal-primary:hover,
+#config-display-modal .gw-modal-primary:hover {
+  background: #1f56ad;
+}
+
+#gateway-modal .gw-modal-secondary,
+#gateway-bulk-test-modal .gw-modal-secondary,
+#gateway-edit-modal .gw-modal-secondary,
+#tool-modal .gw-modal-secondary,
+#tool-test-modal .gw-modal-secondary,
+#tool-edit-modal .gw-modal-secondary,
+#server-modal .gw-modal-secondary,
+#server-edit-modal .gw-modal-secondary,
+#config-selection-modal .gw-modal-secondary,
+#config-display-modal .gw-modal-secondary {
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #374151;
+  transition: background-color 0.2s ease;
+}
+
+#gateway-modal .gw-modal-secondary:hover,
+#gateway-bulk-test-modal .gw-modal-secondary:hover,
+#gateway-edit-modal .gw-modal-secondary:hover,
+#tool-modal .gw-modal-secondary:hover,
+#tool-test-modal .gw-modal-secondary:hover,
+#tool-edit-modal .gw-modal-secondary:hover,
+#server-modal .gw-modal-secondary:hover,
+#server-edit-modal .gw-modal-secondary:hover,
+#config-selection-modal .gw-modal-secondary:hover,
+#config-display-modal .gw-modal-secondary:hover {
+  background: #f9fafb;
+}
+
+.dark #gateway-modal .gw-modal-secondary,
+.dark #gateway-bulk-test-modal .gw-modal-secondary,
+.dark #gateway-edit-modal .gw-modal-secondary,
+.dark #tool-modal .gw-modal-secondary,
+.dark #tool-test-modal .gw-modal-secondary,
+.dark #tool-edit-modal .gw-modal-secondary,
+.dark #server-modal .gw-modal-secondary,
+.dark #server-edit-modal .gw-modal-secondary,
+.dark #config-selection-modal .gw-modal-secondary,
+.dark #config-display-modal .gw-modal-secondary {
+  border-color: #4b5563;
+  background: #111827;
+  color: #e5e7eb;
+}
+
+.dark #gateway-modal .gw-modal-secondary:hover,
+.dark #gateway-bulk-test-modal .gw-modal-secondary:hover,
+.dark #gateway-edit-modal .gw-modal-secondary:hover,
+.dark #tool-modal .gw-modal-secondary:hover,
+.dark #tool-test-modal .gw-modal-secondary:hover,
+.dark #tool-edit-modal .gw-modal-secondary:hover,
+.dark #server-modal .gw-modal-secondary:hover,
+.dark #server-edit-modal .gw-modal-secondary:hover,
+.dark #config-selection-modal .gw-modal-secondary:hover,
+.dark #config-display-modal .gw-modal-secondary:hover {
+  background: #1f2937;
+}
+
+#gateway-edit-modal input[type="text"],
+#gateway-edit-modal input[type="url"],
+#gateway-edit-modal input[type="password"],
+#gateway-edit-modal input[type="number"],
+#gateway-edit-modal textarea,
+#gateway-edit-modal select,
+#tool-edit-modal input[type="text"],
+#tool-edit-modal input[type="url"],
+#tool-edit-modal input[type="password"],
+#tool-edit-modal input[type="number"],
+#tool-edit-modal textarea,
+#tool-edit-modal select,
+#server-edit-modal input[type="text"],
+#server-edit-modal input[type="url"],
+#server-edit-modal input[type="password"],
+#server-edit-modal input[type="number"],
+#server-edit-modal textarea,
+#server-edit-modal select {
+  margin-top: 0.5rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #111827;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#gateway-edit-modal input[type="text"]:focus,
+#gateway-edit-modal input[type="url"]:focus,
+#gateway-edit-modal input[type="password"]:focus,
+#gateway-edit-modal input[type="number"]:focus,
+#gateway-edit-modal textarea:focus,
+#gateway-edit-modal select:focus,
+#tool-edit-modal input[type="text"]:focus,
+#tool-edit-modal input[type="url"]:focus,
+#tool-edit-modal input[type="password"]:focus,
+#tool-edit-modal input[type="number"]:focus,
+#tool-edit-modal textarea:focus,
+#tool-edit-modal select:focus,
+#server-edit-modal input[type="text"]:focus,
+#server-edit-modal input[type="url"]:focus,
+#server-edit-modal input[type="password"]:focus,
+#server-edit-modal input[type="number"]:focus,
+#server-edit-modal textarea:focus,
+#server-edit-modal select:focus {
+  outline: none;
+  border-color: #0b1f3a;
+  box-shadow: 0 0 0 2px rgba(11, 31, 58, 0.2);
+}
+
+.dark #gateway-edit-modal input[type="text"],
+.dark #gateway-edit-modal input[type="url"],
+.dark #gateway-edit-modal input[type="password"],
+.dark #gateway-edit-modal input[type="number"],
+.dark #gateway-edit-modal textarea,
+.dark #gateway-edit-modal select,
+.dark #tool-edit-modal input[type="text"],
+.dark #tool-edit-modal input[type="url"],
+.dark #tool-edit-modal input[type="password"],
+.dark #tool-edit-modal input[type="number"],
+.dark #tool-edit-modal textarea,
+.dark #tool-edit-modal select,
+.dark #server-edit-modal input[type="text"],
+.dark #server-edit-modal input[type="url"],
+.dark #server-edit-modal input[type="password"],
+.dark #server-edit-modal input[type="number"],
+.dark #server-edit-modal textarea,
+.dark #server-edit-modal select {
+  background: #111827;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+.dark #gateway-edit-modal input[type="text"]:focus,
+.dark #gateway-edit-modal input[type="url"]:focus,
+.dark #gateway-edit-modal input[type="password"]:focus,
+.dark #gateway-edit-modal input[type="number"]:focus,
+.dark #gateway-edit-modal textarea:focus,
+.dark #gateway-edit-modal select:focus,
+.dark #tool-edit-modal input[type="text"]:focus,
+.dark #tool-edit-modal input[type="url"]:focus,
+.dark #tool-edit-modal input[type="password"]:focus,
+.dark #tool-edit-modal input[type="number"]:focus,
+.dark #tool-edit-modal textarea:focus,
+.dark #tool-edit-modal select:focus,
+.dark #server-edit-modal input[type="text"]:focus,
+.dark #server-edit-modal input[type="url"]:focus,
+.dark #server-edit-modal input[type="password"]:focus,
+.dark #server-edit-modal input[type="number"]:focus,
+.dark #server-edit-modal textarea:focus,
+.dark #server-edit-modal select:focus {
+  border-color: #f2b705;
+  box-shadow: 0 0 0 2px rgba(242, 183, 5, 0.2);
+}
+
+#gateway-edit-modal input[type="radio"],
+#gateway-edit-modal input[type="checkbox"],
+#tool-edit-modal input[type="radio"],
+#tool-edit-modal input[type="checkbox"],
+#server-edit-modal input[type="radio"],
+#server-edit-modal input[type="checkbox"] {
+  margin-top: 0;
+  width: auto;
+}
+
+/* =======================================================
+  METRICS PANEL - UPDATED UI LOOK
+======================================================= */
+
+#metrics-panel .metrics-header-card,
+#metrics-panel .metrics-surface-card{
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+
+.dark #metrics-panel .metrics-header-card,
+.dark #metrics-panel .metrics-surface-card{
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+#metrics-panel .metrics-title{
+  color:#0b1f3a;
+}
+
+.dark #metrics-panel .metrics-title{
+  color:#f9fafb;
+}
+
+#metrics-panel .metrics-subtitle{
+  color:#4b5563;
+}
+
+.dark #metrics-panel .metrics-subtitle{
+  color:#9ca3af;
+}
+
+#metrics-panel .metrics-primary-btn{
+  background: #2561C1;
+  color:#ffffff;
+  border:none;
+  border-radius:10px;
+  transition: background-color 0.2s ease;
+}
+
+#metrics-panel .metrics-primary-btn:hover{
+  background:#1f56ad;
+}
+
+#metrics-panel .metrics-secondary-btn{
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background:#ffffff;
+  color:#374151;
+  transition: background-color 0.2s ease;
+}
+
+#metrics-panel .metrics-secondary-btn:hover{
+  background:#f9fafb;
+}
+
+.dark #metrics-panel .metrics-secondary-btn{
+  border-color:#4b5563;
+  background:#111827;
+  color:#e5e7eb;
+}
+
+.dark #metrics-panel .metrics-secondary-btn:hover{
+  background:#1f2937;
+}
+
+#metrics-panel .metrics-system-card{
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0b1f3a 0%, #2561C1 100%);
+  color:#ffffff;
+  border: 1px solid rgba(37,97,193,0.35);
+}
+
+#metrics-panel .metrics-kpi-card{
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background:#ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.dark #metrics-panel .metrics-kpi-card{
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+}
+
+#metrics-panel .metrics-kpi-accent{
+  width:4px;
+  border-radius:999px;
+}
+
+#metrics-panel .metrics-kpi-blue .metrics-kpi-accent{
+  background:#2561C1;
+}
+
+#metrics-panel .metrics-kpi-green .metrics-kpi-accent{
+  background:#22c55e;
+}
+
+#metrics-panel .metrics-kpi-amber .metrics-kpi-accent{
+  background:#f2b705;
+}
+
+#metrics-panel .metrics-kpi-red .metrics-kpi-accent{
+  background:#ef4444;
+}
+
+#metrics-panel .metrics-tab{
+  border-bottom:2px solid transparent;
+  color:#6b7280;
+  padding: 0.75rem 0.25rem;
+  font-size:0.875rem;
+  font-weight:600;
+  text-transform:capitalize;
+  white-space:nowrap;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+#metrics-panel .metrics-tab:hover{
+  color:#1f2937;
+}
+
+#metrics-panel .metrics-tab.active{
+  border-bottom-color:#2561C1;
+  color:#2561C1;
+}
+
+.dark #metrics-panel .metrics-tab{
+  color:#9ca3af;
+}
+
+.dark #metrics-panel .metrics-tab:hover{
+  color:#e5e7eb;
+}
+
+.dark #metrics-panel .metrics-tab.active{
+  border-bottom-color:#f2b705;
+  color:#f2b705;
+}
+
+#metrics-panel .metrics-table-wrap{
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:12px;
+  overflow:auto;
+}
+
+.dark #metrics-panel .metrics-table-wrap{
+  border:1px solid rgba(255,255,255,0.12);
+}
+
+#metrics-panel .metrics-table thead{
+  background:#f8fafc;
+}
+
+.dark #metrics-panel .metrics-table thead{
+  background:#1f2937;
+}
+
+#metrics-panel .metrics-table tbody tr:hover{
+  background:#f8fafc;
+}
+
+.dark #metrics-panel .metrics-table tbody tr:hover{
+  background:#1f2937;
+}
+
+/* =======================================================
+  LOGS + VERSION PANEL - UPDATED UI LOOK
+======================================================= */
+
+#logs-panel .logs-header-card,
+#logs-panel .logs-surface-card,
+#version-info-panel .version-surface-card {
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+
+.dark #logs-panel .logs-header-card,
+.dark #logs-panel .logs-surface-card,
+.dark #version-info-panel .version-surface-card {
+  background:#111827;
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+#logs-panel .logs-title{
+  color:#0b1f3a;
+}
+
+.dark #logs-panel .logs-title{
+  color:#f9fafb;
+}
+
+#logs-panel .logs-subtitle{
+  color:#4b5563;
+}
+
+.dark #logs-panel .logs-subtitle{
+  color:#9ca3af;
+}
+
+#logs-panel .logs-input{
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background:#ffffff;
+  color:#111827;
+  padding: 0.5rem 0.75rem;
+}
+
+.dark #logs-panel .logs-input{
+  border-color:#374151;
+  background:#111827;
+  color:#e5e7eb;
+}
+
+#logs-panel .logs-btn-primary,
+#logs-panel .logs-btn-success,
+#logs-panel .logs-btn-danger,
+#logs-panel .logs-btn-secondary {
+  border-radius:10px;
+  transition: background-color 0.2s ease;
+}
+
+#logs-panel .logs-btn-primary{
+  background:#2561C1;
+  color:#fff;
+  border:none;
+}
+
+#logs-panel .logs-btn-primary:hover{
+  background:#1f56ad;
+}
+
+#logs-panel .logs-btn-success{
+  background:#16a34a;
+  color:#fff;
+  border:none;
+}
+
+#logs-panel .logs-btn-success:hover{
+  background:#15803d;
+}
+
+#logs-panel .logs-btn-danger{
+  background:#dc2626;
+  color:#fff;
+  border:none;
+}
+
+#logs-panel .logs-btn-danger:hover{
+  background:#b91c1c;
+}
+
+#logs-panel .logs-btn-secondary{
+  border:1px solid #d1d5db;
+  background:#fff;
+  color:#374151;
+}
+
+#logs-panel .logs-btn-secondary:hover{
+  background:#f9fafb;
+}
+
+.dark #logs-panel .logs-btn-secondary{
+  border-color:#4b5563;
+  background:#111827;
+  color:#e5e7eb;
+}
+
+.dark #logs-panel .logs-btn-secondary:hover{
+  background:#1f2937;
+}
+
+#logs-panel .logs-stats-chip{
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background:#f8fafc;
+}
+
+.dark #logs-panel .logs-stats-chip{
+  border-color: rgba(255,255,255,0.12);
+  background:#1f2937;
+}
+
+#logs-panel .logs-table-wrap{
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:12px;
+  overflow:auto;
+}
+
+.dark #logs-panel .logs-table-wrap{
+  border:1px solid rgba(255,255,255,0.12);
+}
+
+#logs-panel .logs-table thead{
+  background:#f8fafc;
+}
+
+.dark #logs-panel .logs-table thead{
+  background:#1f2937;
+}
+
+#logs-panel .logs-table tbody tr:hover{
+  background:#f8fafc;
+}
+
+.dark #logs-panel .logs-table tbody tr:hover{
+  background:#1f2937;
+}
+
+#version-info-panel .version-shell{
+  display:grid;
+  gap:1.25rem;
+}
+
+#version-info-panel .version-hero-card{
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0b1f3a 0%, #2561C1 100%);
+  color:#ffffff;
+  border: 1px solid rgba(37,97,193,0.35);
+}
+
+#version-info-panel .version-subcard,
+#version-info-panel .version-data-row{
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,0.06);
+  background:#f8fafc;
+}
+
+.dark #version-info-panel .version-subcard,
+.dark #version-info-panel .version-data-row{
+  border:1px solid rgba(255,255,255,0.10);
+  background:#1f2937;
+}
+
+/* =======================================================
   VIRTUAL SERVERS (CATALOG PANEL) - CLONE GATEWAYS LOOK
 ======================================================= */
 

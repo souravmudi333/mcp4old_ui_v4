@@ -240,8 +240,20 @@ function validatePassthroughHeader(name, value) {
  * SECURITY: Validate input names to prevent XSS and ensure clean data
  */
 function validateInputName(name, type = "input") {
+    const rawType = String(type || "input").trim();
+    const lowerType = rawType.toLowerCase();
+    const titledType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+    const hasSpecificFieldWord =
+        /(name|uri|url|id|identifier|property|parameter)/i.test(rawType);
+    const subject =
+        lowerType === "name"
+            ? "Name"
+            : hasSpecificFieldWord
+              ? titledType
+              : `${titledType} name`;
+
     if (!name || typeof name !== "string") {
-        return { valid: false, error: `${type} name is required` };
+        return { valid: false, error: `${subject} is required` };
     }
 
     // Remove any HTML tags
@@ -260,20 +272,20 @@ function validateInputName(name, type = "input") {
         if (pattern.test(name)) {
             return {
                 valid: false,
-                error: `${type} name contains invalid characters`,
+                error: `${subject} contains invalid characters`,
             };
         }
     }
 
     // Length validation
     if (cleaned.length < 1) {
-        return { valid: false, error: `${type} name cannot be empty` };
+        return { valid: false, error: `${subject} cannot be empty` };
     }
 
     if (cleaned.length > window.MAX_NAME_LENGTH) {
         return {
             valid: false,
-            error: `${type} name must be ${window.MAX_NAME_LENGTH} characters or less`,
+            error: `${subject} must be ${window.MAX_NAME_LENGTH} characters or less`,
         };
     }
 
@@ -500,13 +512,67 @@ function handleFetchError(error, operation = "operation") {
 }
 
 // Show user-friendly error messages
+function normalizePermissionErrorMessage(message) {
+    const raw = String(message ?? "");
+    const lower = raw.toLowerCase();
+    const isPermissionError =
+        lower.includes("403") ||
+        lower.includes("forbidden") ||
+        lower.includes("permission denied") ||
+        lower.includes("insufficient permission") ||
+        lower.includes("insufficient permissions") ||
+        lower.includes("not enough permissions") ||
+        lower.includes("access denied") ||
+        lower.includes("not authorized") ||
+        lower.includes("unauthorized");
+
+    if (!isPermissionError) {
+        return raw;
+    }
+
+    const requiredMatch = raw.match(/required:\s*([a-z0-9._:-]+)/i);
+    const requiredPerm = requiredMatch?.[1] || "";
+
+    if (!requiredPerm) {
+        return "You don't have permission to perform this action.";
+    }
+
+    const [resourceRaw = "resource", actionRaw = "access"] = requiredPerm.split(".");
+    const resource = resourceRaw.replace(/[_-]+/g, " ").trim();
+
+    const actionMap = {
+        create: "create",
+        read: "view",
+        view: "view",
+        list: "view",
+        discover: "discover",
+        update: "edit",
+        edit: "edit",
+        write: "edit",
+        delete: "delete",
+        remove: "delete",
+        test: "test",
+        invoke: "test",
+        execute: "test",
+        manage: "manage",
+        admin: "manage",
+        toggle: "manage",
+        activate: "manage",
+        deactivate: "manage",
+    };
+
+    const action = actionMap[actionRaw] || "access";
+    return `You don't have permission to ${action} ${resource}. Required: ${requiredPerm} (or admin access).`;
+}
+
 function showErrorMessage(message, elementId = null) {
-    console.error("Error:", message);
+    const normalizedMessage = normalizePermissionErrorMessage(message);
+    console.error("Error:", normalizedMessage);
 
     if (elementId) {
         const element = safeGetElement(elementId);
         if (element) {
-            element.textContent = message;
+            element.textContent = normalizedMessage;
             element.classList.add("error-message", "text-red-600", "mt-2");
         }
     } else {
@@ -514,7 +580,7 @@ function showErrorMessage(message, elementId = null) {
         const errorDiv = document.createElement("div");
         errorDiv.className =
             "fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded shadow-lg z-50";
-        errorDiv.textContent = message;
+        errorDiv.textContent = normalizedMessage;
         document.body.appendChild(errorDiv);
 
         setTimeout(() => {
@@ -917,6 +983,35 @@ async function fetchWithTimeoutAndRetry(
 /**
  * Show loading state for metrics
  */
+function createMetricsHeaderCard() {
+    const headerCard = document.createElement("div");
+    headerCard.className = "metrics-header-card p-6 sm:p-8";
+    headerCard.innerHTML = `
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h2 class="metrics-title text-2xl font-bold">Gateway Metrics</h2>
+                <p class="metrics-subtitle mt-1 text-sm">
+                    Track tool, gateway, and server usage to spot failures and optimize performance.
+                </p>
+            </div>
+            <button
+                onclick="loadAggregatedMetrics()"
+                class="metrics-primary-btn inline-flex items-center justify-center px-4 py-2 text-sm font-semibold"
+            >
+                Refresh Metrics
+            </button>
+        </div>
+    `;
+    return headerCard;
+}
+
+function createMetricsMainContainer() {
+    const mainContainer = document.createElement("div");
+    mainContainer.className = "space-y-6";
+    mainContainer.appendChild(createMetricsHeaderCard());
+    return mainContainer;
+}
+
 function showMetricsLoading() {
     const metricsPanel = safeGetElement("metrics-panel", true); // suppress warning
     if (metricsPanel) {
@@ -925,18 +1020,21 @@ function showMetricsLoading() {
             return;
         }
 
+        const mainContainer = createMetricsMainContainer();
         const loadingDiv = document.createElement("div");
         loadingDiv.id = "metrics-loading";
-        loadingDiv.className = "flex justify-center items-center p-8";
+        loadingDiv.className =
+            "metrics-surface-card p-8 flex justify-center items-center";
         loadingDiv.innerHTML = `
             <div class="text-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                <p class="text-gray-600">Loading metrics...</p>
-                <p class="text-sm text-gray-500 mt-2">This may take a moment</p>
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-gray-700 dark:text-gray-200 font-medium">Loading metrics...</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">This may take a moment</p>
             </div>
         `;
         metricsPanel.innerHTML = "";
-        metricsPanel.appendChild(loadingDiv);
+        mainContainer.appendChild(loadingDiv);
+        metricsPanel.appendChild(mainContainer);
     }
 }
 
@@ -956,8 +1054,9 @@ function hideMetricsLoading() {
 function showMetricsError(error) {
     const metricsPanel = safeGetElement("metrics-panel");
     if (metricsPanel) {
+        const mainContainer = createMetricsMainContainer();
         const errorDiv = document.createElement("div");
-        errorDiv.className = "text-center p-8";
+        errorDiv.className = "metrics-surface-card text-center p-8";
 
         const errorMessage = handleFetchError(error, "load metrics");
 
@@ -977,19 +1076,20 @@ function showMetricsError(error) {
                 <svg class="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-                <h3 class="text-lg font-medium mb-2">Failed to Load Metrics</h3>
-                <p class="text-sm mb-2">${escapeHtml(errorMessage)}</p>
-                <p class="text-xs text-gray-500 mb-4">${helpText}</p>
+                <h3 class="text-lg font-semibold mb-2">Failed to Load Metrics</h3>
+                <p class="text-sm mb-2 text-gray-700 dark:text-gray-200">${escapeHtml(errorMessage)}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">${helpText}</p>
                 <button
                     onclick="retryLoadMetrics()"
-                    class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors">
+                    class="metrics-primary-btn px-4 py-2 text-sm font-semibold">
                     Try Again
                 </button>
             </div>
         `;
 
         metricsPanel.innerHTML = "";
-        metricsPanel.appendChild(errorDiv);
+        mainContainer.appendChild(errorDiv);
+        metricsPanel.appendChild(mainContainer);
     }
 }
 
@@ -1010,12 +1110,20 @@ window.retryLoadMetrics = retryLoadMetrics;
 function showMetricsPlaceholder() {
     const metricsPanel = safeGetElement("metrics-panel");
     if (metricsPanel) {
+        const mainContainer = createMetricsMainContainer();
         const placeholderDiv = document.createElement("div");
-        placeholderDiv.className = "text-gray-600 p-4 text-center";
-        placeholderDiv.textContent =
-            "Metrics endpoint not available. This feature may not be implemented yet.";
+        placeholderDiv.className = "metrics-surface-card text-center p-8";
+        placeholderDiv.innerHTML = `
+            <p class="text-gray-700 dark:text-gray-200 font-medium">
+                Metrics endpoint not available.
+            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                This feature may not be implemented yet in this environment.
+            </p>
+        `;
         metricsPanel.innerHTML = "";
-        metricsPanel.appendChild(placeholderDiv);
+        mainContainer.appendChild(placeholderDiv);
+        metricsPanel.appendChild(mainContainer);
     }
 }
 
@@ -1033,26 +1141,28 @@ function displayMetrics(data) {
     try {
         // FIX: Handle completely empty data
         if (!data || Object.keys(data).length === 0) {
+            const mainContainer = createMetricsMainContainer();
             const emptyStateDiv = document.createElement("div");
-            emptyStateDiv.className = "text-center p-8 text-gray-500";
+            emptyStateDiv.className =
+                "metrics-surface-card text-center p-8 text-gray-500";
             emptyStateDiv.innerHTML = `
                 <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
-                <h3 class="text-lg font-medium mb-2">No Metrics Available</h3>
-                <p class="text-sm">Metrics data will appear here once tools, resources, or prompts are executed.</p>
-                <button onclick="retryLoadMetrics()" class="mt-4 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">No Metrics Available</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Metrics data will appear here once tools, gateways, or servers are executed.</p>
+                <button onclick="retryLoadMetrics()" class="metrics-primary-btn mt-4 px-4 py-2 text-sm font-semibold">
                     Refresh Metrics
                 </button>
             `;
             metricsPanel.innerHTML = "";
-            metricsPanel.appendChild(emptyStateDiv);
+            mainContainer.appendChild(emptyStateDiv);
+            metricsPanel.appendChild(mainContainer);
             return;
         }
 
         // Create main container with safe structure
-        const mainContainer = document.createElement("div");
-        mainContainer.className = "space-y-6";
+        const mainContainer = createMetricsMainContainer();
 
         // System overview section (top priority display)
         if (data.system || data.overall) {
@@ -1147,12 +1257,11 @@ function displayMetrics(data) {
 function createSystemSummaryCard(systemData) {
     try {
         const card = document.createElement("div");
-        card.className =
-            "bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-6 text-white";
+        card.className = "metrics-system-card p-6 sm:p-7";
 
         // Card title
         const title = document.createElement("h2");
-        title.className = "text-2xl font-bold mb-4";
+        title.className = "text-2xl font-bold mb-5";
         title.textContent = "System Overview";
         card.appendChild(title);
 
@@ -1211,7 +1320,8 @@ function createSystemSummaryCard(systemData) {
                 "N/A";
 
             const statDiv = document.createElement("div");
-            statDiv.className = "text-center";
+            statDiv.className =
+                "rounded-lg bg-white/10 border border-white/15 p-3 text-center";
 
             const valueSpan = document.createElement("div");
             valueSpan.className = "text-2xl font-bold";
@@ -1219,7 +1329,7 @@ function createSystemSummaryCard(systemData) {
                 (value === "N/A" ? "N/A" : String(value)) + stat.suffix;
 
             const labelSpan = document.createElement("div");
-            labelSpan.className = "text-blue-100 text-sm";
+            labelSpan.className = "text-blue-100 text-xs uppercase tracking-wide";
             labelSpan.textContent = stat.label;
 
             statDiv.appendChild(valueSpan);
@@ -1248,28 +1358,24 @@ function createKPISection(kpiData) {
             {
                 key: "totalExecutions",
                 label: "Total Executions",
-                icon: "🎯",
-                color: "blue",
+                colorClass: "metrics-kpi-blue",
             },
             {
                 key: "successRate",
                 label: "Success Rate",
-                icon: "✅",
-                color: "green",
+                colorClass: "metrics-kpi-green",
                 suffix: "%",
             },
             {
                 key: "avgResponseTime",
                 label: "Avg Response Time",
-                icon: "⚡",
-                color: "yellow",
+                colorClass: "metrics-kpi-amber",
                 suffix: "ms",
             },
             {
                 key: "errorRate",
                 label: "Error Rate",
-                icon: "❌",
-                color: "red",
+                colorClass: "metrics-kpi-red",
                 suffix: "%",
             },
         ];
@@ -1278,30 +1384,30 @@ function createKPISection(kpiData) {
             const value = kpiData[kpi.key] ?? "N/A";
 
             const kpiCard = document.createElement("div");
-            kpiCard.className = `bg-white rounded-lg shadow p-4 border-l-4 border-${kpi.color}-500 dark:bg-gray-800`;
+            kpiCard.className = `metrics-kpi-card ${kpi.colorClass} p-4`;
 
             const header = document.createElement("div");
-            header.className = "flex items-center justify-between";
+            header.className = "flex items-stretch gap-3";
 
-            const iconSpan = document.createElement("span");
-            iconSpan.className = "text-2xl";
-            iconSpan.textContent = kpi.icon;
+            const accent = document.createElement("span");
+            accent.className = "metrics-kpi-accent";
+            header.appendChild(accent);
 
             const valueDiv = document.createElement("div");
-            valueDiv.className = "text-right";
+            valueDiv.className = "flex-1";
 
             const valueSpan = document.createElement("div");
-            valueSpan.className = `text-2xl font-bold text-${kpi.color}-600`;
+            valueSpan.className = "text-2xl font-bold text-gray-900 dark:text-gray-100";
             valueSpan.textContent =
                 (value === "N/A" ? "N/A" : String(value)) + (kpi.suffix || "");
 
             const labelSpan = document.createElement("div");
-            labelSpan.className = "text-sm text-gray-500 dark:text-gray-400";
+            labelSpan.className =
+                "text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400";
             labelSpan.textContent = kpi.label;
 
             valueDiv.appendChild(valueSpan);
             valueDiv.appendChild(labelSpan);
-            header.appendChild(iconSpan);
             header.appendChild(valueDiv);
             kpiCard.appendChild(header);
             section.appendChild(kpiCard);
@@ -1431,31 +1537,19 @@ function extractKPIData(data) {
 function createEnhancedTopPerformersSection(topData) {
     try {
         const section = document.createElement("div");
-        section.className = "bg-white rounded-lg shadow p-6 dark:bg-gray-800";
+        section.className = "metrics-surface-card p-6";
 
         const title = document.createElement("h3");
-        title.className = "text-lg font-medium mb-4 dark:text-gray-200";
+        title.className = "text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100";
         title.textContent = "Top Performers";
         title.setAttribute("aria-label", "Top Performers Section");
         section.appendChild(title);
 
-        // Loading skeleton
-        const skeleton = document.createElement("div");
-        skeleton.className = "animate-pulse space-y-4";
-        skeleton.innerHTML = `
-            <div class="h-4 bg-gray-200 rounded w-1/4 dark:bg-gray-700"></div>
-            <div class="space-y-2">
-                <div class="h-10 bg-gray-200 rounded dark:bg-gray-700"></div>
-                <div class="h-32 bg-gray-200 rounded dark:bg-gray-700"></div>
-            </div>`;
-        section.appendChild(skeleton);
-
         // Tabs
         const tabsContainer = document.createElement("div");
-        tabsContainer.className =
-            "border-b border-gray-200 dark:border-gray-700";
+        tabsContainer.className = "border-b border-gray-200 dark:border-gray-700";
         const tabList = document.createElement("nav");
-        tabList.className = "-mb-px flex space-x-8 overflow-x-auto";
+        tabList.className = "-mb-px flex space-x-6 overflow-x-auto";
         tabList.setAttribute("aria-label", "Top Performers Tabs");
 
         const entityTypes = [
@@ -1492,13 +1586,10 @@ function createEnhancedTopPerformersSection(topData) {
 
         section.appendChild(contentContainer);
 
-        // Remove skeleton once data is loaded
-        setTimeout(() => skeleton.remove(), 500); // Simulate async data load
-
         // Export button
         const exportButton = document.createElement("button");
         exportButton.className =
-            "mt-4 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600";
+            "metrics-primary-btn mt-4 px-4 py-2 text-sm font-semibold";
         exportButton.textContent = "Export Metrics";
         exportButton.onclick = () => exportMetricsToCSV(topData);
         section.appendChild(exportButton);
@@ -1569,16 +1660,14 @@ function createTopPerformersTable(entityType, data, isActive) {
 
     // Responsive table wrapper
     const tableWrapper = document.createElement("div");
-    tableWrapper.className = "overflow-x-auto sm:overflow-x-visible";
+    tableWrapper.className = "metrics-table-wrap";
 
     const table = document.createElement("table");
-    table.className =
-        "min-w-full divide-y divide-gray-200 dark:divide-gray-700";
+    table.className = "metrics-table min-w-full divide-y divide-gray-200 dark:divide-gray-700";
 
     // Table header
     const thead = document.createElement("thead");
-    thead.className =
-        "bg-gray-50 dark:bg-gray-700 hidden sm:table-header-group";
+    thead.className = "hidden sm:table-header-group";
     const headerRow = document.createElement("tr");
     const headers = [
         "Rank",
@@ -1592,7 +1681,7 @@ function createTopPerformersTable(entityType, data, isActive) {
     headers.forEach((headerText, index) => {
         const th = document.createElement("th");
         th.className =
-            "px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider";
+            "px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider";
         th.setAttribute("scope", "col");
         th.textContent = headerText;
         if (index === 0) {
@@ -1619,7 +1708,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Rank
         const rankCell = document.createElement("td");
         rankCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 sm:px-6 sm:py-4";
+            "px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100";
         const rankBadge = document.createElement("span");
         rankBadge.className = `inline-flex items-center justify-center w-6 h-6 rounded-full ${
             index === 0
@@ -1638,7 +1727,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Name (clickable for drill-down)
         const nameCell = document.createElement("td");
         nameCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm figma-blue-txt dark:text-indigo-400 cursor-pointer";
+            "px-4 py-3 whitespace-nowrap text-sm font-medium text-blue-700 dark:text-blue-300 cursor-pointer";
         nameCell.textContent = escapeHtml(item.name || "Unknown");
         // nameCell.onclick = () => showDetailedMetrics(entityType, item.id);
         nameCell.setAttribute("role", "button");
@@ -1651,7 +1740,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Executions
         const execCell = document.createElement("td");
         execCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 sm:px-6 sm:py-4";
+            "px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300";
         execCell.textContent = formatNumber(
             item.executionCount || item.execution_count || item.executions || 0,
         );
@@ -1660,7 +1749,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Avg Response Time
         const avgTimeCell = document.createElement("td");
         avgTimeCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 sm:px-6 sm:py-4";
+            "px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300";
         const avgTime = item.avg_response_time || item.avgResponseTime;
         avgTimeCell.textContent = avgTime ? `${Math.round(avgTime)}ms` : "N/A";
         row.appendChild(avgTimeCell);
@@ -1668,7 +1757,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Success Rate
         const successCell = document.createElement("td");
         successCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm sm:px-6 sm:py-4";
+            "px-4 py-3 whitespace-nowrap text-sm";
         const successRate = calculateSuccessRate(item);
         const successBadge = document.createElement("span");
         successBadge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1689,7 +1778,7 @@ function createTopPerformersTable(entityType, data, isActive) {
         // Last Used
         const lastUsedCell = document.createElement("td");
         lastUsedCell.className =
-            "px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 sm:px-6 sm:py-4";
+            "px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300";
         lastUsedCell.textContent = formatLastUsed(
             item.last_execution || item.lastExecution,
         );
@@ -1717,11 +1806,7 @@ function createTab(type, isActive) {
     const tab = document.createElement("a");
     tab.href = "#";
     tab.id = `top-${type}-tab`;
-    tab.className = `${
-        isActive
-            ? "figma-nav-selected figma-blue-border figma-blue-txt dark:text-indigo-400"
-            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
-    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors duration-200 sm:py-4 sm:px-1`;
+    tab.className = `metrics-tab ${isActive ? "active" : ""}`;
     tab.textContent = type;
     tab.setAttribute("role", "tab");
     tab.setAttribute("aria-controls", `top-${type}-panel`);
@@ -1751,11 +1836,7 @@ function showTopPerformerTab(activeType) {
             panel.setAttribute("aria-hidden", type !== activeType);
         }
         if (tab) {
-            tab.classList.toggle("figma-blue-border", type === activeType);
-            tab.classList.toggle("figma-blue-txt", type === activeType);
-            tab.classList.toggle("dark:text-indigo-400", type === activeType);
-            tab.classList.toggle("border-transparent", type !== activeType);
-            tab.classList.toggle("text-gray-500", type !== activeType);
+            tab.classList.toggle("active", type === activeType);
             tab.setAttribute("aria-selected", type === activeType);
         }
     });
@@ -1768,12 +1849,12 @@ function createPaginationControls(totalItems, itemsPerPage, onPageChange) {
 
     for (let page = 1; page <= totalPages; page++) {
         const button = document.createElement("button");
-        button.className = `px-3 py-1 rounded ${page === 1 ? "bg-indigo-600 text-white" : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"}`;
+        button.className = `px-3 py-1.5 text-sm font-medium rounded-lg ${page === 1 ? "metrics-primary-btn text-white" : "metrics-secondary-btn"}`;
         button.textContent = page;
         button.onclick = () => {
             onPageChange(page);
             pagination.querySelectorAll("button").forEach((btn) => {
-                btn.className = `px-3 py-1 rounded ${btn === button ? "bg-indigo-600 text-white" : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"}`;
+                btn.className = `px-3 py-1.5 text-sm font-medium rounded-lg ${btn === button ? "metrics-primary-btn text-white" : "metrics-secondary-btn"}`;
             });
         };
         pagination.appendChild(button);
@@ -1889,10 +1970,10 @@ function exportMetricsToCSV(topData) {
 function createPerformanceCard(performanceData) {
     try {
         const card = document.createElement("div");
-        card.className = "bg-white rounded-lg shadow p-6 dark:bg-gray-800";
+        card.className = "metrics-surface-card p-6";
 
         const titleElement = document.createElement("h3");
-        titleElement.className = "text-lg font-medium mb-4 dark:text-gray-200";
+        titleElement.className = "text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100";
         titleElement.textContent = "Performance Metrics";
         card.appendChild(titleElement);
 
@@ -1918,7 +1999,8 @@ function createPerformanceCard(performanceData) {
                 "N/A";
 
             const metricRow = document.createElement("div");
-            metricRow.className = "flex justify-between";
+            metricRow.className =
+                "flex justify-between rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-900/50";
 
             const label = document.createElement("span");
             label.className = "text-gray-600 dark:text-gray-400";
@@ -1947,10 +2029,10 @@ function createPerformanceCard(performanceData) {
 function createRecentActivitySection(activityData) {
     try {
         const section = document.createElement("div");
-        section.className = "bg-white rounded-lg shadow p-6 dark:bg-gray-800";
+        section.className = "metrics-surface-card p-6";
 
         const title = document.createElement("h3");
-        title.className = "text-lg font-medium mb-4 dark:text-gray-200";
+        title.className = "text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100";
         title.textContent = "Recent Activity";
         section.appendChild(title);
 
@@ -1962,7 +2044,7 @@ function createRecentActivitySection(activityData) {
             activityData.slice(0, 10).forEach((activity) => {
                 const activityItem = document.createElement("div");
                 activityItem.className =
-                    "flex items-center justify-between p-2 bg-gray-50 rounded dark:bg-gray-700";
+                    "flex items-center justify-between p-3 bg-gray-50 rounded-lg dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700";
 
                 const leftSide = document.createElement("div");
 
@@ -2007,10 +2089,10 @@ function createRecentActivitySection(activityData) {
 
 function createMetricsCard(title, metrics) {
     const card = document.createElement("div");
-    card.className = "bg-white rounded-lg shadow p-6 dark:bg-gray-800";
+    card.className = "metrics-surface-card p-6";
 
     const titleElement = document.createElement("h3");
-    titleElement.className = "text-lg font-medium mb-4 dark:text-gray-200";
+    titleElement.className = "text-lg font-semibold mb-4 text-gray-800 dark:text-gray-100";
     titleElement.textContent = `${title} Metrics`;
     card.appendChild(titleElement);
 
@@ -2033,7 +2115,8 @@ function createMetricsCard(title, metrics) {
             "N/A";
 
         const metricRow = document.createElement("div");
-        metricRow.className = "flex justify-between";
+        metricRow.className =
+            "flex justify-between rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-900/50";
 
         const label = document.createElement("span");
         label.className = "text-gray-600 dark:text-gray-400";
@@ -4639,18 +4722,13 @@ function showTab(tabName) {
                 }
 
                 if (tabName === "teams") {
-                    // Load Teams list if not already loaded
                     const teamsList = safeGetElement("teams-list");
-                    if (teamsList) {
-                        // Check if it's still showing the loading message or is empty
-                        const hasLoadingMessage =
-                            teamsList.innerHTML.includes("Loading teams...");
-                        const isEmpty = teamsList.innerHTML.trim() === "";
-                        if (hasLoadingMessage || isEmpty) {
-                            // Trigger HTMX load manually if HTMX is available
-                            loadTeamsByRelationship('all');
-
-                        }
+                    if (teamsList && !panel.classList.contains("hidden")) {
+                        const activeFilter = document.querySelector(
+                            "#teams-panel .filter-btn.active",
+                        );
+                        const filterType = activeFilter?.dataset?.filter || "all";
+                        loadTeamsByRelationship(filterType);
                     }
                 }
 
@@ -5958,12 +6036,13 @@ async function testTool(toolId) {
                 }
 
                 const fieldDiv = document.createElement("div");
-                fieldDiv.className = "mb-4";
+                fieldDiv.className =
+                    "rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900/40";
 
                 // Field label - use textContent to avoid double escaping
                 const label = document.createElement("label");
                 label.className =
-                    "block text-sm font-medium text-gray-700 dark:text-gray-300";
+                    "block text-sm font-medium text-gray-700 dark:text-white";
 
                 // Create span for label text
                 const labelText = document.createElement("span");
@@ -6001,7 +6080,7 @@ async function testTool(toolId) {
                         input.required =
                             schema.required && schema.required.includes(key);
                         input.className =
-                            "mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:figma-blue-border focus:ring-indigo-500 dark:bg-gray-900 text-gray-700 dark:text-gray-300 dark:border-gray-700 dark:focus:border-indigo-400 dark:focus:ring-indigo-400";
+                            "mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900";
 
                         const itemTypes = Array.isArray(prop.items?.anyOf)
                             ? prop.items.anyOf.map((t) => t.type)
@@ -6106,7 +6185,7 @@ async function testTool(toolId) {
                     fieldInput.className =
                         prop.type === "boolean"
                             ? "mt-1 h-4 w-4 figma-blue-txt dark:text-indigo-200 border border-gray-300 rounded"
-                            : "mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:figma-blue-border focus:ring-indigo-500 dark:bg-gray-900 text-gray-700 dark:text-gray-300 dark:border-gray-700 dark:focus:border-indigo-400 dark:focus:ring-indigo-400";
+                            : "mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900";
 
                     // Set default values here
                     if (prop.default !== undefined) {
@@ -7063,7 +7142,7 @@ function renderGatewayToolsForTesting(tools) {
   if (!toolsDiv) return;
 
   if (!Array.isArray(tools) || tools.length === 0) {
-    toolsDiv.innerHTML = `<div class="text-sm text-gray-600 dark:text-gray-300">
+    toolsDiv.innerHTML = `<div class="text-sm text-gray-600 dark:text-white">
       No enabled tools found for this gateway.
     </div>`;
     return;
@@ -7082,11 +7161,11 @@ function renderGatewayToolsForTesting(tools) {
       if (type === "object" || type === "array") {
         return `
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-400">
+            <label class="block text-sm font-medium text-gray-700 dark:text-white">
               ${escapeHtml(key)}${req ? ' <span class="text-red-500">*</span>' : ""}
             </label>
             <textarea
-              class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-700 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-300 font-mono text-xs p-2"
+              class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900 font-mono text-xs p-2"
               rows="4"
               placeholder="${type === "object" ? "{ } (JSON)" : "[ ] (JSON)"}"
               data-tool-param="1"
@@ -7103,11 +7182,11 @@ function renderGatewayToolsForTesting(tools) {
       if (type === "boolean") {
         return `
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-400">
+            <label class="block text-sm font-medium text-gray-700 dark:text-white">
               ${escapeHtml(key)}${req ? ' <span class="text-red-500">*</span>' : ""}
             </label>
             <select
-              class="mt-1 selectfield border border-gray-300 dark:border-gray-700 shadow-sm focus:figma-blue-border focus:ring-indigo-500 dark:bg-gray-900 dark:text-gray-300"
+              class="mt-1 selectfield border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900"
               data-tool-param="1"
               data-tool-id="${escapeHtml(tool.id)}"
               data-key="${escapeHtml(key)}"
@@ -7126,12 +7205,12 @@ function renderGatewayToolsForTesting(tools) {
       const inputType = (type === "number" || type === "integer") ? "number" : "text";
       return `
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-400">
+          <label class="block text-sm font-medium text-gray-700 dark:text-white">
             ${escapeHtml(key)}${req ? ' <span class="text-red-500">*</span>' : ""}
           </label>
           <input
             type="${inputType}"
-            class="mt-1 block textfield rounded-md border border-gray-300 dark:border-gray-700 shadow-sm focus:figma-blue-border focus:ring-indigo-500 dark:bg-gray-900 dark:placeholder-gray-300 dark:text-gray-300"
+            class="mt-1 block textfield rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-gray-900"
             placeholder="${escapeHtml(desc || "")}"
             data-tool-param="1"
             data-tool-id="${escapeHtml(tool.id)}"
@@ -7159,10 +7238,10 @@ function renderGatewayToolsForTesting(tools) {
                 ${escapeHtml(tool.name || "Unnamed tool")}
               </div>
             </div>
-            ${tool.description ? `<div class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+            ${tool.description ? `<div class="mt-1 text-sm text-gray-600 dark:text-white">
               ${escapeHtml(tool.description)}
             </div>` : ""}
-            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">${escapeHtml(tool.id)}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-white font-mono">${escapeHtml(tool.id)}</div>
           </div>
 
           <button
@@ -7176,7 +7255,7 @@ function renderGatewayToolsForTesting(tools) {
 
         <div id="tool-params-${escapeHtml(tool.id)}" class="mt-4 hidden">
           ${Object.keys(properties).length === 0
-            ? `<div class="text-sm text-gray-600 dark:text-gray-300">This tool has no input parameters.</div>`
+            ? `<div class="text-sm text-gray-600 dark:text-white">This tool has no input parameters.</div>`
             : `<div class="grid grid-cols-2 gap-6">${fields}</div>`
           }
 
@@ -7411,9 +7490,9 @@ function renderPrettyJsonBox(title, obj, domId) {
   const raw = JSON.stringify(obj ?? null, null, 2);
 
   return `
-    <div class="mt-2 bg-gray-100 p-2 rounded overflow-auto text-sm text-gray-800 max-h-64 dark:bg-gray-900 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
+    <div class="mt-2 bg-gray-100 p-2 rounded overflow-auto text-sm text-gray-800 max-h-64 dark:bg-gray-900 dark:text-white border border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between mb-2">
-        <div class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(title)}</div>
+        <div class="text-sm font-medium text-gray-700 dark:text-white">${escapeHtml(title)}</div>
         <button
           type="button"
           class="px-3 py-1 border border-blue-600 rounded bg-white text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -7422,7 +7501,7 @@ function renderPrettyJsonBox(title, obj, domId) {
           Copy
         </button>
       </div>
-      <pre id="${domId}" class="whitespace-pre-wrap font-mono text-xs">${escapeHtml(raw)}</pre>
+      <pre id="${domId}" class="whitespace-pre-wrap font-mono text-xs text-gray-900 dark:text-white">${escapeHtml(raw)}</pre>
     </div>
   `;
 }
@@ -7459,7 +7538,7 @@ function renderBulkResultCard(r, compact = false) {
           <div class="font-bold text-gray-800 dark:text-gray-100 truncate">
             ${icon} ${escapeHtml(r.tool_name || r.tool_id || "Tool")}
           </div>
-          ${compact ? "" : `<div class="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">${escapeHtml(r.tool_id || "")}</div>`}
+          ${compact ? "" : `<div class="mt-1 text-xs text-gray-500 dark:text-white font-mono">${escapeHtml(r.tool_id || "")}</div>`}
         </div>
         ${statusBadge}
       </div>
@@ -7467,14 +7546,14 @@ function renderBulkResultCard(r, compact = false) {
       ${err}
 
       <details class="mt-4" ${compact ? "" : "open"}>
-        <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
+        <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-white">
           RPC Envelope
         </summary>
         ${renderPrettyJsonBox("RPC", r.rpc ?? {}, rpcId)}
       </details>
 
       <details class="mt-4" ${compact ? "" : "open"}>
-        <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
+        <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-white">
           Result
         </summary>
         ${renderPrettyJsonBox("Result", r.result ?? null, resId)}
@@ -9354,12 +9433,31 @@ function initializeToolSelects() {
 function initializeEventListeners() {
     console.log("Setting up event listeners...");
 
+    setupHeaderHomeNavigation();
     setupTabNavigation();
     setupHTMXHooks();
     setupAuthenticationToggles();
     setupFormHandlers();
     setupSchemaModeHandlers();
     setupIntegrationTypeHandlers();
+}
+
+function setupHeaderHomeNavigation() {
+    const logoHomeBtn = safeGetElement("logo-home-button", true);
+    if (!logoHomeBtn || logoHomeBtn.hasAttribute("data-setup")) {
+        return;
+    }
+
+    logoHomeBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        showTab("gateways");
+        if (window.history && typeof window.history.replaceState === "function") {
+            window.history.replaceState(null, "", "#gateways");
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    logoHomeBtn.setAttribute("data-setup", "true");
 }
 
 function setupTabNavigation() {
@@ -9369,6 +9467,7 @@ function setupTabNavigation() {
         "resources",
         "prompts",
         "gateways",
+        "teams",
         "a2a-agents",
         "roots",
         "metrics",
@@ -9379,7 +9478,7 @@ function setupTabNavigation() {
 
     tabs.forEach((tabName) => {
         // Suppress warnings for optional tabs that might not be enabled
-        const optionalTabs = ["roots", "logs", "export-import", "version-info"];
+        const optionalTabs = ["roots", "logs", "export-import", "version-info", "teams"];
         const suppressWarning = optionalTabs.includes(tabName);
 
         const tabElement = safeGetElement(`tab-${tabName}`, suppressWarning);
@@ -9708,6 +9807,56 @@ function filterServerTable(searchText) {
 
 // Make server search function available globally
 window.filterServerTable = filterServerTable;
+
+/**
+ * Filter gateway cards based on search text
+ */
+function filterGatewayTable(searchText) {
+    try {
+        const cards = document.querySelectorAll("#gateways-panel .gw-card");
+        if (!cards.length) {
+            console.warn("Gateway cards not found");
+            return;
+        }
+
+        const search = (searchText || "").toLowerCase().trim();
+        cards.forEach((card) => {
+            const textContent = (card.textContent || "").toLowerCase();
+            card.style.display =
+                search === "" || textContent.includes(search) ? "" : "none";
+        });
+    } catch (error) {
+        console.error("Error filtering gateway cards:", error);
+    }
+}
+
+// Make gateway search function available globally
+window.filterGatewayTable = filterGatewayTable;
+
+/**
+ * Filter tool cards based on search text
+ */
+function filterToolCards(searchText) {
+    try {
+        const cards = document.querySelectorAll("#tools-panel .tool-card");
+        if (!cards.length) {
+            console.warn("Tool cards not found");
+            return;
+        }
+
+        const search = (searchText || "").toLowerCase().trim();
+        cards.forEach((card) => {
+            const textContent = (card.textContent || "").toLowerCase();
+            card.style.display =
+                search === "" || textContent.includes(search) ? "" : "none";
+        });
+    } catch (error) {
+        console.error("Error filtering tool cards:", error);
+    }
+}
+
+// Make tools search function available globally
+window.filterToolCards = filterToolCards;
 
 function handleAuthTypeChange() {
     const authType = this.value;
@@ -13846,6 +13995,35 @@ function normalizeTeams(rawTeams) {
   }));
 }
 
+function isAdminUserForTeams() {
+  return window.__IS_ADMIN__ === true || window.__IS_ADMIN__ === "true";
+}
+
+function getMyTeamIdsForAdminView() {
+  const teams = Array.isArray(window.USER_TEAMS_DATA) ? window.USER_TEAMS_DATA : [];
+  return new Set(teams.map((t) => String(t?.id || "")).filter(Boolean));
+}
+
+function splitAdminOwnVsOtherTeams(teams) {
+  if (!isAdminUserForTeams()) {
+    return { ownTeams: teams, otherTeams: [] };
+  }
+  const myTeamIds = getMyTeamIdsForAdminView();
+  const ownTeams = teams.filter((t) => myTeamIds.has(String(t?.id || "")));
+  const otherTeams = teams.filter((t) => !myTeamIds.has(String(t?.id || "")));
+  return { ownTeams, otherTeams };
+}
+
+function syncAdminOtherTeamsFilterVisibility() {
+  const btn = document.getElementById("team-filter-others");
+  if (!btn) return;
+  if (isAdminUserForTeams()) {
+    btn.classList.remove("hidden");
+  } else {
+    btn.classList.add("hidden");
+  }
+}
+
 function renderTeamsList(data) {
   console.log("🔥 renderTeamsList called", data);
   const container = document.getElementById('teams-list');
@@ -13868,7 +14046,7 @@ function renderTeamsList(data) {
 
   if (teams.length === 0) {
     container.innerHTML = `
-      <p class="text-gray-500 text-center py-6">
+      <p class="col-span-full text-gray-500 text-center py-6">
         No teams found.
       </p>
     `;
@@ -13876,99 +14054,124 @@ function renderTeamsList(data) {
   }
 
   container.innerHTML = `
-    <div class="space-y-4">
+    <div class="col-span-full grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
       ${teams.map(team => {
-        const isEffectiveOwner = team.is_owner || team.is_admin;
+        const viewerIsAdmin = isAdminUserForTeams();
+        const isOwner = Boolean(team.is_owner);
+        const isMember = Boolean(team.is_member);
+        const canManageTeam = isOwner || viewerIsAdmin;
+        const roleBadge = isOwner
+          ? `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-[#2561C1]/10 text-[#1f56ad] dark:bg-blue-900/30 dark:text-blue-300">Owner</span>`
+          : viewerIsAdmin && source === "teams"
+          ? `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">Admin</span>`
+          : isMember
+          ? `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Member</span>`
+          : source === "discover" && team.can_join
+          ? `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">Can Join</span>`
+          : `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Team</span>`;
+
+        const visibility = escapeHtml((team.visibility || "private").toString());
+        const visibilityKey = (team.visibility || "private").toString().toLowerCase();
+        const visibilityLabel = visibilityKey.charAt(0).toUpperCase() + visibilityKey.slice(1);
+        const description = escapeHtml((team.description || "").toString());
+        const teamName = escapeHtml((team.name || "").toString());
+        const teamId = escapeHtml((team.id || "").toString());
+        const memberCount = Number(team.member_count || 0);
+        const memberLabel = `${memberCount} ${memberCount === 1 ? "Member" : "Members"}`;
+        const canJoin = source === "discover" && team.can_join;
+        const alreadyRequested = Boolean(team.requested);
+        const visibilityPillClass = visibilityKey === "public"
+          ? "border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+          : "border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300";
 
         return `
-        <div class="team-card border rounded-lg p-4 bg-white dark:bg-gray-800">
-
-          <!-- HEADER -->
-          <div class="flex justify-between items-start">
-            <div>
-              <h4 class="font-semibold text-gray-900 dark:text-white">
-                ${team.name}
-              </h4>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                ${team.description || ''}
-              </p>
+        <div class="team-card p-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm" data-team-card>
+          <div class="relative flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full ${canManageTeam ? "bg-green-500" : isMember ? "bg-blue-500" : "bg-yellow-500"} shadow"></span>
+                <h4 class="gw-title text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  ${teamName}
+                </h4>
+              </div>
+              <div class="mt-2">
+                <div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  <span class="uppercase tracking-wide font-semibold">Team ID</span>
+                  <span class="gw-pill !px-2 !py-0.5" title="${teamId}">
+                    <span class="truncate max-w-[210px] text-[11px]">${teamId}</span>
+                  </span>
+                </div>
+              </div>
             </div>
-            ${
-              isEffectiveOwner
-                ? `<span class="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700">Owner</span>`
-                : team.is_member
-                ? `<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Member</span>`
-                : source === 'discover' && team.can_join
-                ? `<span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-700">Can Join</span>`
-                : ''
-            }
+            ${roleBadge}
           </div>
 
-          <!-- META -->
-          <p class="mt-2 text-sm text-gray-500">
-            ${team.visibility} · ${team.member_count} members
-          </p>
+          <div class="gw-divider my-4"></div>
 
-          <!-- ACTIONS -->
-          <div class="mt-4 flex justify-end">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${visibilityPillClass}">
+              ${visibilityLabel}
+            </span>
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+              ${memberLabel}
+            </span>
+          </div>
+
+          <div class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed min-h-[2.5rem]">
+            ${description || "No description"}
+          </div>
+
+          <div class="mt-4 flex justify-end gap-2 flex-wrap">
             ${
-              // OWNER OR ADMIN
-              isEffectiveOwner
+              // DISCOVER always uses join request action (even for admin)
+              source === "discover"
                 ? `
-                  <div class="flex gap-2">
-
+                  <button
+                    class="px-3 py-1.5 text-xs font-semibold rounded-xl ${alreadyRequested ? "bg-gray-300 text-gray-700 cursor-not-allowed dark:bg-gray-700 dark:text-gray-300" : "bg-[#2561C1] hover:bg-[#1f56ad] text-white"}"
+                    data-team-id="${teamId}"
+                    data-team-name="${teamName}"
+                    onclick="${alreadyRequested ? "" : "openJoinConfirm(this)"}"
+                    ${alreadyRequested ? "disabled" : ""}
+                  >
+                    ${alreadyRequested ? "Join Request Sent" : "Send Join Request"}
+                  </button>
+                `
+                // OWNER OR ADMIN (non-discover)
+                : canManageTeam
+                ? `
                     <button
-                      class="px-3 py-1 text-sm bg-gray-800 text-white rounded"
-                      data-team-id="${team.id}"
-                      data-team-name="${team.name}"
-                      data-is-owner="${isEffectiveOwner}"
-                      data-visibility="${team.visibility}"
+                      class="px-3 py-1.5 text-xs font-semibold rounded-xl text-[#2561C1] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                      data-team-id="${teamId}"
+                      data-team-name="${teamName}"
+                      data-is-owner="${isOwner}"
+                      data-visibility="${visibility}"
                       onclick="openTeamOptions(this)"
                     >
-                      View Team Options
+                      Manage Team
                     </button>
 
                     <button
-                      class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                      data-team-id="${team.id}"
+                      class="px-3 py-1.5 text-xs font-semibold rounded-xl bg-[#2561C1] hover:bg-[#1f56ad] text-white"
+                      data-team-id="${teamId}"
                       onclick="openEditTeamModal(this)"
                     >
-                      Edit Team
+                      Edit
                     </button>
 
                     <button
-                      class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                      data-team-id="${team.id}"
-                      data-team-name="${team.name}"
+                      class="px-3 py-1.5 text-xs font-semibold rounded-xl text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
+                      data-team-id="${teamId}"
+                      data-team-name="${teamName}"
                       onclick="deleteTeamSafe(this)"
                     >
                       Delete
                     </button>
-
-                  </div>
-                `
-                // DISCOVER
-                : source === 'discover'
-                ? `
-                  <button
-                    class="px-3 py-1 text-sm ${
-                      team.requested
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700'
-                    } text-white rounded"
-                    data-team-id="${team.id}"
-                    data-team-name="${team.name}"
-                    onclick="${team.requested ? '' : 'openJoinConfirm(this)'}"
-                    ${team.requested ? 'disabled' : ''}
-                  >
-                    ${team.requested ? 'Requested' : 'Request to Join'}
-                  </button>
                 `
                 // MEMBER DEFAULT
                 : `
                   <button
-                    class="px-3 py-1 text-sm bg-gray-800 text-white rounded"
-                    onclick="openMemberViewModal('${team.id}')"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-xl text-[#2561C1] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                    onclick="openMemberViewModal('${teamId}')"
                   >
                     View Members
                   </button>
@@ -13982,8 +14185,11 @@ function renderTeamsList(data) {
   `;
 }
 
-function renderTeamMembersModal(members, isOwner) {
+function renderTeamMembersModal(members, canManage, options = {}) {
   const container = document.getElementById('team-edit-modal-content');
+  const teamId = options.teamId || "";
+  const teamVisibility = (options.visibility || "").toLowerCase();
+  const canShowActions = Boolean(canManage && teamId);
 
   if (!members || members.length === 0) {
     container.innerHTML = `
@@ -13995,80 +14201,80 @@ function renderTeamMembersModal(members, isOwner) {
   }
 
   container.innerHTML = `
-    <!-- HEADER -->
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-medium text-gray-900 dark:text-white">
-        Team Members
-      </h3>
-      <button
-        onclick="document.getElementById('team-edit-modal').classList.add('hidden')"
-        class="text-gray-400 hover:text-gray-600"
-      >
-        ✕
-      </button>
-    </div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6">
+      <div class="flex justify-between items-center mb-5">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Team Members</h3>
+        <button
+          type="button"
+          onclick="document.getElementById('team-edit-modal').classList.add('hidden')"
+          class="text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-gray-100 text-lg"
+        >
+          ✕
+        </button>
+      </div>
 
-    <!-- TABLE HEADER -->
-    <div class="grid grid-cols-3 gap-4 text-sm font-medium text-gray-500 border-b pb-2 mb-3">
-      <div>Member</div>
-      <div>Role</div>
-      <div class="text-right">Actions</div>
-    </div>
+      ${
+        canShowActions
+          ? `
+            <div class="mb-4 flex items-center justify-end">
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-[#2561C1] hover:bg-[#1f56ad] text-white shadow-sm"
+                onclick="openInviteUserModal('${escapeHtml(teamId)}')"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 8v8M8 12h8"></path>
+                </svg>
+                Invite User
+              </button>
+            </div>
+          `
+          : ""
+      }
 
-    <!-- ROWS -->
-    <div class="space-y-2">
-      ${members.map(m => `
-        <div class="grid grid-cols-3 gap-4 items-center border-b pb-2">
+      <div class="space-y-3">
+        ${members.map(m => `
+          <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/40 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(m.user_email)}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Role: ${escapeHtml(m.role)}</div>
+            </div>
 
-          <!-- COLUMN 1: EMAIL -->
-          <div class="text-sm text-gray-900 dark:text-gray-200">
-            ${m.user_email}
+            <div class="flex items-center gap-2">
+              ${
+                canManage
+                  ? `
+                    <select
+                      class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200"
+                      data-user-email="${escapeHtml(m.user_email)}"
+                      data-team-id="${escapeHtml(m.team_id)}"
+                      data-current-role="${escapeHtml(m.role)}"
+                      onchange="changeMemberRole(this)"
+                    >
+                      <option value="member" ${m.role === 'member' ? 'selected' : ''}>Member</option>
+                      <option value="owner" ${m.role === 'owner' ? 'selected' : ''}>Owner</option>
+                    </select>
+                    <button
+                      class="px-3 py-1.5 text-xs font-semibold rounded-xl text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
+                      data-user-email="${escapeHtml(m.user_email)}"
+                      data-team-id="${escapeHtml(m.team_id)}"
+                      onclick="removeTeamMember(this)"
+                    >
+                      Remove
+                    </button>
+                  `
+                  : `
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                      ${escapeHtml(m.role)}
+                    </span>
+                  `
+              }
+            </div>
           </div>
-
-          <!-- COLUMN 2: ROLE -->
-          <div>
-            ${
-              isOwner
-                ? `
-                  <select
-                  class="border rounded px-2 py-1 text-sm"
-                  data-user-email="${m.user_email}"
-                  data-team-id="${m.team_id}"
-                  data-current-role="${m.role}"
-                  onchange="changeMemberRole(this)"
-                  >
-                    <option value="member" ${m.role === 'member' ? 'selected' : ''}>Member</option>
-                    <option value="owner" ${m.role === 'owner' ? 'selected' : ''}>Owner</option>
-                  </select>
-                `
-                : `
-                  <span class="text-sm text-gray-600">
-                    ${m.role}
-                  </span>
-                `
-            }
-          </div>
-
-          <!-- COLUMN 3: ACTION -->
-          <div class="text-right">
-            ${
-              isOwner
-                ? `
-                  <button
-                    class="text-red-600 text-sm hover:underline"
-                    data-user-email="${m.user_email}"
-                    data-team-id="${m.team_id}"
-                    onclick="removeTeamMember(this)"
-                  >
-                    Remove
-                  </button>
-                `
-                : ``
-            }
-          </div>
-
-        </div>
-      `).join('')}
+        `).join('')}
+      </div>
     </div>
   `;
 }
@@ -14110,7 +14316,7 @@ function renderJoinRequestsModal(requests) {
           <!-- RIGHT ACTIONS -->
           <div class="flex gap-2">
             <button
-              class="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded"
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl bg-green-600 hover:bg-green-700 text-white"
               data-team-id="${req.team_id}"
               data-request-id="${req.id}"
               onclick="approveJoinRequestSafe(this)"
@@ -14119,7 +14325,7 @@ function renderJoinRequestsModal(requests) {
             </button>
 
             <button
-              class="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded"
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
               data-team-id="${req.team_id}"
               data-request-id="${req.id}"
               onclick="rejectJoinRequestSafe(this)"
@@ -14139,7 +14345,7 @@ function renderInvitationsList(invitations) {
 
   if (!invitations || invitations.length === 0) {
     container.innerHTML = `
-      <p class="text-gray-500 text-center py-6">
+      <p class="col-span-full text-gray-500 text-center py-6">
         No pending invitations.
       </p>
     `;
@@ -14147,41 +14353,59 @@ function renderInvitationsList(invitations) {
   }
 
   container.innerHTML = `
-    <div class="space-y-4">
+    <div class="col-span-full grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
       ${invitations.map(inv => `
-        <div class="border rounded-lg p-4 bg-white dark:bg-gray-800">
-
-          <div class="flex justify-between items-center">
-            <div>
-              <h4 class="font-semibold text-gray-900 dark:text-white">
-                ${inv.team_name}
+        <div class="p-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h4 class="gw-title text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+                ${escapeHtml(inv.team_name || "Team")}
               </h4>
-              <p class="text-sm text-gray-500">
-                Role: ${inv.role}
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Role: ${escapeHtml(inv.role || "member")}
               </p>
             </div>
+            <span class="gw-pill">Invitation</span>
+          </div>
+          <div class="gw-divider my-4"></div>
+          <div class="flex justify-end gap-2">
+            <button
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl bg-green-600 hover:bg-green-700 text-white"
+              onclick="acceptInvitation('${inv.token}')"
+            >
+              Accept
+            </button>
 
-            <div class="flex gap-2">
-              <button
-                class="px-3 py-1 text-sm bg-green-600 text-white rounded"
-                onclick="acceptInvitation('${inv.token}')"
-              >
-                Accept
-              </button>
-
-              <button
-                class="px-3 py-1 text-sm bg-red-600 text-white rounded"
-                onclick="rejectInvitation('${inv.token}')"
-              >
-                Reject
-              </button>
-            </div>
-
+            <button
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
+              onclick="rejectInvitation('${inv.token}')"
+            >
+              Reject
+            </button>
           </div>
         </div>
       `).join('')}
     </div>
   `;
+}
+
+function filterTeams(searchText) {
+  const cards = document.querySelectorAll("#teams-list [data-team-card]");
+  const query = (searchText || "").toLowerCase().trim();
+
+  cards.forEach((card) => {
+    const text = (card.textContent || "").toLowerCase();
+    card.style.display = !query || text.includes(query) ? "" : "none";
+  });
+}
+
+function resolveTeamError(err, fallback = "Operation failed") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (Array.isArray(err.detail)) {
+    return err.detail.map((d) => d?.msg || d?.message || JSON.stringify(d)).join("; ");
+  }
+  return err.detail || err.message || fallback;
 }
 
 function acceptInvitation(token) {
@@ -14200,12 +14424,12 @@ function acceptInvitation(token) {
     return res.json().catch(() => ({}));
   })
   .then(() => {
-    alert('Invitation accepted');
+    showSuccessMessage('Invitation accepted');
     showInvitations();
     loadTeamsByRelationship('all');
   })
   .catch(err => {
-    alert(err.detail || 'Failed to accept invitation');
+    showErrorMessage(resolveTeamError(err, 'Failed to accept invitation'));
   });
 }
 
@@ -14225,66 +14449,26 @@ function rejectInvitation(token) {
     return res.json().catch(() => ({}));
   })
   .then(() => {
-    alert('Invitation rejected');
+    showSuccessMessage('Invitation rejected');
     showInvitations();
     loadTeamsByRelationship('all');
   })
   .catch(err => {
-    alert(err.detail || 'Failed to reject invitation');
+    showErrorMessage(resolveTeamError(err, 'Failed to reject invitation'));
   });
 }
 
 function openTeamOptions(button) {
   const teamId = button.dataset.teamId;
+  const teamName = button.dataset.teamName || "";
   const isOwner = button.dataset.isOwner === 'true';
+  const isAdmin = isAdminUserForTeams();
+  const canManage = isOwner || isAdmin;
   const visibility = button.dataset.visibility;
-
-  const container = document.getElementById('team-options-actions');
-  container.innerHTML = '';
-
-  // 1️⃣ View Members (owner only now)
-  if (isOwner) {
-    container.innerHTML += `
-      <button
-        class="w-full px-4 py-2 bg-gray-200 rounded text-sm"
-        onclick="openMembersFromOptions('${teamId}', true)"
-      >
-        View Members
-      </button>
-    `;
-  }
-
-  // 2️⃣ View Join Requests (ONLY public & owner)
-  if (isOwner && visibility === 'public') {
-    container.innerHTML += `
-      <button
-        class="w-full px-4 py-2 bg-gray-200 rounded text-sm"
-        onclick="openJoinRequestsFromOptions('${teamId}')"
-      >
-        View Join Requests
-      </button>
-    `;
-  }
-
-  // 3️⃣ Invite User (owner only)
-  if (isOwner) {
-    container.innerHTML += `
-      <button
-        class="w-full px-4 py-2 bg-indigo-600 text-white rounded text-sm"
-        onclick="openInviteUserModal('${teamId}')"
-      >
-        Invite User
-      </button>
-    `;
-  }
-
-  document.getElementById('team-options-modal').classList.remove('hidden');
-
-  console.log("isOwner:", isOwner);
-  console.log("visibility:", visibility);
+  openMembersFromOptions(teamId, canManage, visibility, teamName);
 }
 
-function openMembersFromOptions(teamId, isOwner) {
+function openMembersFromOptions(teamId, canManage, visibility = "", teamName = "") {
   closeTeamOptionsModal();
 
   fetch(`${window.ROOT_PATH}/teams/${teamId}/members`, {
@@ -14294,12 +14478,22 @@ function openMembersFromOptions(teamId, isOwner) {
   })
     .then(res => res.json())
     .then(members => {
-      renderTeamMembersModal(members, isOwner);
+      renderTeamMembersModal(members, canManage, { teamId, visibility, teamName });
       document.getElementById('team-edit-modal').classList.remove('hidden');
     })
     .catch(err => {
-      alert(err.detail || 'Failed to load team members');
+      showErrorMessage(resolveTeamError(err, 'Failed to load team members'));
     });
+}
+
+function openJoinRequestsFromManage(teamId) {
+  viewJoinRequestsSafe({
+    getAttribute: () => teamId
+  });
+}
+
+function openEditTeamModalById(teamId) {
+  openEditTeamModal({ dataset: { teamId } });
 }
 
 function openJoinRequestsFromOptions(teamId) {
@@ -14330,7 +14524,7 @@ function openEditTeamModal(button) {
     showEditTeamForm(team);
   })
   .catch(err => {
-    alert(err.detail || 'Failed to load team');
+    showErrorMessage(resolveTeamError(err, 'Failed to load team'));
   });
 }
 
@@ -14342,25 +14536,11 @@ function openMemberViewModal(teamId) {
   })
   .then(res => res.json())
   .then(members => {
-
-    const container = document.getElementById('team-edit-modal-content');
-
-    container.innerHTML = `
-      <h3 class="text-lg font-medium mb-4">Team Members</h3>
-      <div class="space-y-2">
-        ${members.map(m => `
-          <div class="border p-2 rounded flex justify-between">
-            <span>${m.user_email}</span>
-            <span class="text-sm text-gray-500">${m.role}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-
+    renderTeamMembersModal(members, false, { teamId });
     document.getElementById('team-edit-modal').classList.remove('hidden');
   })
   .catch(err => {
-    alert(err.detail || 'Failed to load members');
+    showErrorMessage(resolveTeamError(err, 'Failed to load members'));
   });
 }
 
@@ -14369,9 +14549,10 @@ function openMemberViewModal(teamId) {
 // ===============================
 
 function onTeamFilterClick(button, type) {
+  syncAdminOtherTeamsFilterVisibility();
   // 1️⃣ reset all buttons
   document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.classList.remove('active', 'bg-indigo-600', 'text-white');
+    btn.classList.remove('active', 'bg-[#2561C1]', 'text-white');
     btn.classList.add(
       'bg-white',
       'dark:bg-gray-700',
@@ -14381,7 +14562,7 @@ function onTeamFilterClick(button, type) {
   });
 
   // 2️⃣ activate clicked button
-  button.classList.add('active', 'bg-indigo-600', 'text-white');
+  button.classList.add('active', 'bg-[#2561C1]', 'text-white');
   button.classList.remove(
     'bg-white',
     'dark:bg-gray-700',
@@ -14394,6 +14575,7 @@ function onTeamFilterClick(button, type) {
 }
 
 function loadTeamsByRelationship(type) {
+  syncAdminOtherTeamsFilterVisibility();
   switch (type) {
     case 'all':
       showAllTeams();
@@ -14409,6 +14591,9 @@ function loadTeamsByRelationship(type) {
       break;
     case 'invitations':
       showInvitations();
+      break;
+    case 'others':
+      showOtherTeams();
       break;
     default:
       showAllTeams();
@@ -14434,42 +14619,61 @@ async function fetchAllTeams() {
 
 async function showAllTeams() {
   const container = document.getElementById('teams-list');
-  container.innerHTML = 'Loading teams...';
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading teams...</span></p>';
 
   try {
     const data = await fetchAllTeams();
     const normalized = normalizeTeams(data.teams);
+    const { ownTeams } = splitAdminOwnVsOtherTeams(normalized);
     console.log('✅ fetched teams', data);
     renderTeamsList({
-        teams: normalized,
+        teams: ownTeams,
         source: 'teams'
     });
   } catch (err) {
-    container.innerHTML = '<p class="text-red-500">Failed to load teams</p>';
+    container.innerHTML = '<p class="col-span-full text-center py-6 text-red-500">Failed to load teams</p>';
+  }
+}
+
+async function showOtherTeams() {
+  const container = document.getElementById('teams-list');
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading teams...</span></p>';
+
+  try {
+    const data = await fetchAllTeams();
+    const normalized = normalizeTeams(data.teams);
+    const { otherTeams } = splitAdminOwnVsOtherTeams(normalized);
+    renderTeamsList({
+      teams: otherTeams,
+      source: 'teams'
+    });
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = '<p class="col-span-full text-center py-6 text-red-500">Failed to load teams</p>';
   }
 }
 
 async function showOwnedTeams() {
   const container = document.getElementById('teams-list');
-  container.innerHTML = 'Loading teams...';
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading teams...</span></p>';
 
   try {
     const data = await fetchAllTeams();
     const normalized = normalizeTeams(data.teams);
-    const owned = normalized.filter(t => t.is_owner || t.is_admin);
+    const owned = normalized.filter(t => t.is_owner);
 
     renderTeamsList({
     teams: owned,
     source: 'teams'
     });
   } catch {
-    container.innerHTML = '<p class="text-red-500">Failed to load teams</p>';
+    container.innerHTML = '<p class="col-span-full text-center py-6 text-red-500">Failed to load teams</p>';
   }
 }
 
 async function showMemberTeams() {
   const container = document.getElementById('teams-list');
-  container.innerHTML = 'Loading teams...';
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading teams...</span></p>';
 
   try {
     // 🔥 YOU NEED THIS LINE
@@ -14488,25 +14692,30 @@ async function showMemberTeams() {
 
   } catch (err) {
     console.error(err);
-    container.innerHTML =
-      '<p class="text-red-500">Failed to load teams</p>';
+    container.innerHTML = '<p class="col-span-full text-center py-6 text-red-500">Failed to load teams</p>';
   }
 }
 
 async function showDiscoverTeams() {
   const container = document.getElementById('teams-list');
-  container.innerHTML = 'Loading public teams...';
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading public teams...</span></p>';
 
   try {
+    const token = getCookie('jwt_token') || '';
+    const headers = {
+      'Accept': 'application/json'
+    };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
     const res = await fetch(`${window.ROOT_PATH}/teams/discover`, {
       credentials: 'same-origin',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer ' + (getCookie('jwt_token') || '')
-      }
+      headers
     });
 
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw err?.detail ? err : { detail: `Failed to load public teams (HTTP ${res.status})` };
+    }
 
     const teamsArray = await res.json();
 
@@ -14515,10 +14724,11 @@ async function showDiscoverTeams() {
     ...team,
 
     // 🔑 frontend contract
-    can_join: true,
+    can_join: team.is_joinable !== false,
     is_owner: false,
     is_member: false,
-    is_admin: false
+    is_admin: false,
+    requested: Boolean(team.requested)
     }));
 
     renderTeamsList({
@@ -14526,15 +14736,52 @@ async function showDiscoverTeams() {
     source: 'discover'
     });
 
-  } catch {
-    container.innerHTML =
-      '<p class="text-red-500">Failed to load public teams</p>';
+  } catch (err) {
+    const message = resolveTeamError(err, 'Failed to load public teams');
+    const lower = String(message || "").toLowerCase();
+    const isPermissionError =
+      lower.includes("403") ||
+      lower.includes("forbidden") ||
+      lower.includes("permission denied") ||
+      lower.includes("insufficient permission") ||
+      lower.includes("insufficient permissions") ||
+      lower.includes("access denied") ||
+      lower.includes("not authorized") ||
+      lower.includes("unauthorized");
+
+    if (isPermissionError) {
+      container.innerHTML = `
+        <div class="col-span-full bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 mb-2">
+          <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex h-2 w-2 rounded-full bg-yellow-500"></span>
+              <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Discover Teams</h3>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Insufficient permissions.
+            </p>
+          </div>
+          <div class="p-5">
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              You don’t have permission to discover teams.
+              Required:
+              <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700">teams.discover</code>
+              (or admin access).
+            </p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `<p class="col-span-full text-center py-6 text-red-500">${escapeHtml(message)}</p>`;
+    showErrorMessage(message);
   }
 }
 
 async function showInvitations() {
   const container = document.getElementById('teams-list');
-  container.innerHTML = 'Loading invitations...';
+  container.innerHTML = '<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400"><span class="animate-pulse">Loading invitations...</span></p>';
 
   try {
     const res = await fetch(`${window.ROOT_PATH}/teams/invitations`, {
@@ -14552,116 +14799,439 @@ async function showInvitations() {
     renderInvitationsList(invitations);
 
   } catch {
-    container.innerHTML =
-      '<p class="text-red-500">Failed to load invitations</p>';
+    container.innerHTML = '<p class="col-span-full text-center py-6 text-red-500">Failed to load invitations</p>';
   }
 }
 
-function showInviteTab(type) {
-  const modal = document.getElementById('invite-user-modal');
-  const teamId = modal.dataset.teamId;
-  const container = document.getElementById('invite-tab-content');
+var inviteUserDirectory = Array.isArray(window.inviteUserDirectory)
+  ? window.inviteUserDirectory
+  : [];
+var invitePendingEmails = window.invitePendingEmails instanceof Set
+  ? window.invitePendingEmails
+  : new Set();
+window.inviteUserDirectory = inviteUserDirectory;
+window.invitePendingEmails = invitePendingEmails;
 
-  console.log("invite-tab-content:", container); // ADD THIS
+function ensureInviteState() {
+  if (!Array.isArray(inviteUserDirectory)) {
+    inviteUserDirectory = Array.isArray(window.inviteUserDirectory)
+      ? window.inviteUserDirectory
+      : [];
+  }
+  if (!(invitePendingEmails instanceof Set)) {
+    if (window.invitePendingEmails instanceof Set) {
+      invitePendingEmails = window.invitePendingEmails;
+    } else if (Array.isArray(window.invitePendingEmails)) {
+      invitePendingEmails = new Set(window.invitePendingEmails);
+    } else {
+      invitePendingEmails = new Set();
+    }
+  }
+  window.inviteUserDirectory = inviteUserDirectory;
+  window.invitePendingEmails = invitePendingEmails;
+}
 
-  if (!container) {
-    console.error("❌ invite-tab-content not found in DOM");
+function setInviteInlineStatus(message, type = "info") {
+  const status = document.getElementById("invite-inline-status");
+  if (!status) return;
+
+  status.classList.remove("hidden");
+  status.className = "mb-4 rounded-lg px-3 py-2 text-sm";
+
+  if (type === "error") {
+    status.classList.add("bg-red-50", "text-red-700", "border", "border-red-200", "dark:bg-red-900/20", "dark:text-red-300", "dark:border-red-800");
+  } else if (type === "success") {
+    status.classList.add("bg-green-50", "text-green-700", "border", "border-green-200", "dark:bg-green-900/20", "dark:text-green-300", "dark:border-green-800");
+  } else {
+    status.classList.add("bg-blue-50", "text-blue-700", "border", "border-blue-200", "dark:bg-blue-900/20", "dark:text-blue-300", "dark:border-blue-800");
+  }
+
+  status.textContent = message;
+}
+
+function clearInviteInlineStatus() {
+  const status = document.getElementById("invite-inline-status");
+  if (!status) return;
+  status.textContent = "";
+  status.className = "hidden mb-4 rounded-lg px-3 py-2 text-sm";
+}
+
+function updateInviteSendButtonState() {
+  const select = document.getElementById("invite-user-email-select");
+  const btn = document.getElementById("invite-send-btn");
+  if (!select || !btn) return;
+  const enabled = Boolean(select.value);
+  btn.disabled = !enabled;
+  btn.className = enabled
+    ? "px-4 py-2 rounded-xl bg-[#2561C1] hover:bg-[#1f56ad] text-white text-sm font-semibold"
+    : "px-4 py-2 rounded-xl bg-gray-300 text-gray-600 text-sm font-semibold cursor-not-allowed dark:bg-gray-700 dark:text-gray-300";
+}
+
+function applyInviteUserFilter() {
+  ensureInviteState();
+  const select = document.getElementById("invite-user-email-select");
+  if (!select) return;
+
+  const query = (document.getElementById("invite-user-search")?.value || "").trim().toLowerCase();
+
+  const filtered = inviteUserDirectory.filter((user) => {
+    if (!user.email) return false;
+    if (invitePendingEmails.has(user.email.toLowerCase())) return false;
+    if (!query) return true;
+    const haystack = `${user.full_name || ""} ${user.email}`.toLowerCase();
+    return haystack.includes(query);
+  });
+
+  if (!filtered.length) {
+    select.innerHTML = `<option value="">No matching users</option>`;
+    updateInviteSendButtonState();
     return;
   }
 
-  if (type === 'send') {
-    container.innerHTML = `
-      <form onsubmit="submitUserInvitation(event)">
-        <input type="hidden" name="team_id" value="${teamId}" />
+  select.innerHTML =
+    `<option value="">Select a user...</option>` +
+    filtered
+      .map((user) => {
+        const tags = [
+          user.is_admin ? "Admin" : "",
+          user.is_active === false ? "Inactive" : ""
+        ].filter(Boolean);
+        const suffix = tags.length ? ` (${tags.join(", ")})` : "";
+        const label = `${user.full_name || user.email} - ${user.email}${suffix}`;
+        return `<option value="${escapeHtml(user.email)}">${escapeHtml(label)}</option>`;
+      })
+      .join("");
 
-        <input name="email" placeholder="User email"
-               class="border w-full p-2 mb-2" required />
+  updateInviteSendButtonState();
+}
 
-        <select name="role" class="border w-full p-2 mb-2">
-          <option value="member">Member</option>
-          <option value="owner">Owner</option>
-        </select>
+function formatInviteDate(dateString) {
+  if (!dateString) return "Unknown";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return "Unknown";
+  return d.toLocaleString();
+}
 
-        <button type="submit"
-                class="w-full bg-indigo-600 text-white py-2 rounded">
-          Send Invitation
+async function loadPendingInvitations(teamId) {
+  ensureInviteState();
+  const pendingEl = document.getElementById("invite-pending-list");
+  if (!pendingEl) return;
+
+  pendingEl.innerHTML = `
+    <div class="space-y-2">
+      <div class="h-14 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"></div>
+      <div class="h-14 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"></div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`${window.ROOT_PATH}/teams/${teamId}/invitations`, {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + (getCookie("jwt_token") || "")
+      }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(resolveTeamError(err, `Failed to load invitations (HTTP ${res.status})`));
+    }
+
+    const invitations = await res.json();
+    invitePendingEmails = new Set(
+      (Array.isArray(invitations) ? invitations : [])
+        .map((inv) => (inv?.email || "").toLowerCase())
+        .filter(Boolean)
+    );
+    window.invitePendingEmails = invitePendingEmails;
+
+    if (!invitations.length) {
+      pendingEl.innerHTML = `
+        <div class="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-5 text-center">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No pending invitations</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Invites you send will appear here.</p>
+        </div>
+      `;
+      applyInviteUserFilter();
+      return;
+    }
+
+    pendingEl.innerHTML = invitations.map((inv) => `
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/40 p-3 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(inv.email || "")}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Role: ${escapeHtml(inv.role || "member")} • Sent: ${escapeHtml(formatInviteDate(inv.invited_at))}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expires: ${escapeHtml(formatInviteDate(inv.expires_at))}</p>
+        </div>
+        <button
+          class="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-xl text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
+          onclick="revokeInvitation('${teamId}', '${inv.id}')"
+        >
+          Revoke
         </button>
-      </form>
-    `;
+      </div>
+    `).join("");
+
+    applyInviteUserFilter();
+  } catch (err) {
+    pendingEl.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${escapeHtml(resolveTeamError(err, "Failed to load invitations"))}</p>`;
+  }
+}
+
+function showInviteTab(type, clickedBtn = null) {
+  const modal = document.getElementById("invite-user-modal");
+  const teamId = modal?.dataset?.teamId;
+  const container = document.getElementById("invite-tab-content");
+  const tabs = modal?.querySelectorAll('[data-invite-tab]') || [];
+
+  if (!container || !teamId) {
+    console.error("Invite modal not ready");
+    return;
   }
 
-  if (type === 'pending') {
-    fetch(`${window.ROOT_PATH}/teams/${teamId}/invitations`, {
-      headers: {
-        'Authorization': 'Bearer ' + (getCookie('jwt_token') || '')
-      }
-    })
-    .then(res => res.json())
-    .then(invitations => {
-      if (!invitations.length) {
-        container.innerHTML = `<p>No pending invitations</p>`;
-        return;
-      }
+  tabs.forEach((btn) => {
+    const active = btn.getAttribute("data-invite-tab") === type;
+    btn.className = active
+      ? "min-w-[140px] px-4 py-2 rounded-md text-sm font-semibold bg-[#2561C1] text-white shadow-sm"
+      : "min-w-[140px] px-4 py-2 rounded-md text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600";
+  });
 
-      container.innerHTML = invitations.map(inv => `
-        <div class="border p-3 flex justify-between items-center mb-2">
-          <div>
-            <p>${inv.email}</p>
-            <p class="text-xs text-gray-500">Role: ${inv.role}</p>
-          </div>
+  if (type === "pending") {
+    container.innerHTML = `
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold tracking-wide text-gray-900 dark:text-gray-100">Pending Invitations</h4>
           <button
-            class="text-red-600"
-            onclick="revokeInvitation('${teamId}', '${inv.id}')">
-            Revoke
+            type="button"
+            onclick="loadPendingInvitations('${teamId}')"
+            class="px-2.5 py-1.5 text-xs font-semibold rounded-lg text-[#2561C1] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+          >
+            Refresh
           </button>
         </div>
-      `).join('');
+        <div id="invite-pending-list" class="space-y-2"></div>
+      </div>
+    `;
+    loadPendingInvitations(teamId);
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 p-4">
+      <h4 class="text-sm font-bold tracking-wide text-gray-900 dark:text-gray-100 mb-3">Send Invite</h4>
+      <form id="invite-user-form" class="space-y-4" onsubmit="submitUserInvitation(event)">
+        <input type="hidden" name="team_id" value="${teamId}" />
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Search User</label>
+          <input
+            id="invite-user-search"
+            type="text"
+            placeholder="Search by name or email..."
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">User</label>
+          <select
+            id="invite-user-email-select"
+            name="email"
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200"
+            required
+          >
+            <option value="">Loading users...</option>
+          </select>
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Existing members and already-invited users are hidden.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Role</label>
+          <select name="role" class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200">
+            <option value="member" selected>Member</option>
+            <option value="owner">Owner</option>
+          </select>
+        </div>
+
+        <div class="flex justify-end">
+          <button id="invite-send-btn" type="submit" class="px-4 py-2 rounded-xl bg-gray-300 text-gray-600 text-sm font-semibold cursor-not-allowed dark:bg-gray-700 dark:text-gray-300" disabled>
+            Send Invitation
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const searchInput = document.getElementById("invite-user-search");
+  const emailSelect = document.getElementById("invite-user-email-select");
+  if (searchInput) searchInput.addEventListener("input", applyInviteUserFilter);
+  if (emailSelect) emailSelect.addEventListener("change", updateInviteSendButtonState);
+  loadInviteUserDropdown(teamId);
+}
+
+async function loadInviteUserDropdown(teamId) {
+  ensureInviteState();
+  const select = document.getElementById("invite-user-email-select");
+  if (!select) return;
+
+  try {
+    select.innerHTML = `<option value="">Loading users...</option>`;
+
+    const [usersRes, membersRes] = await Promise.all([
+      fetch(`${window.ROOT_PATH}/admin/users?format=json`, {
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + (getCookie("jwt_token") || "")
+        }
+      }),
+      fetch(`${window.ROOT_PATH}/teams/${teamId}/members`, {
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + (getCookie("jwt_token") || "")
+        }
+      })
+    ]);
+
+    if (!usersRes.ok) {
+      const err = await usersRes.json().catch(() => ({}));
+      throw new Error(resolveTeamError(err, `Failed to load users (HTTP ${usersRes.status})`));
+    }
+    if (!membersRes.ok) {
+      const err = await membersRes.json().catch(() => ({}));
+      throw new Error(resolveTeamError(err, `Failed to load members (HTTP ${membersRes.status})`));
+    }
+
+    const usersData = await usersRes.json();
+    const membersData = await membersRes.json();
+
+    const memberEmails = new Set(
+      (Array.isArray(membersData) ? membersData : [])
+        .map((m) => (m?.user_email || "").toLowerCase())
+        .filter(Boolean)
+    );
+
+    const rawUsers = Array.isArray(usersData) ? usersData : Array.isArray(usersData.users) ? usersData.users : [];
+    const userMap = new Map();
+
+    rawUsers.forEach((u) => {
+      const userObj = typeof u === "string" ? { email: u } : (u || {});
+      const email = (userObj.email || "").trim();
+      if (!email) return;
+      if (memberEmails.has(email.toLowerCase())) return;
+      userMap.set(email.toLowerCase(), {
+        email,
+        full_name: userObj.full_name || "",
+        is_admin: Boolean(userObj.is_admin),
+        is_active: typeof userObj.is_active === "boolean" ? userObj.is_active : true
+      });
     });
+
+    inviteUserDirectory = Array.from(userMap.values()).sort((a, b) =>
+      (a.full_name || a.email).localeCompare(b.full_name || b.email)
+    );
+    window.inviteUserDirectory = inviteUserDirectory;
+
+    if (!inviteUserDirectory.length) {
+      select.innerHTML = `<option value="">No eligible users available</option>`;
+      updateInviteSendButtonState();
+      return;
+    }
+
+    applyInviteUserFilter();
+  } catch (error) {
+    select.innerHTML = `<option value="">Failed to load users</option>`;
+    showErrorMessage(resolveTeamError(error, "Failed to load users"));
+    setInviteInlineStatus(resolveTeamError(error, "Failed to load users"), "error");
   }
 }
 
 function showEditTeamForm(team) {
   const container = document.getElementById('team-edit-modal-content');
+  const safeName = escapeHtml(team?.name || "");
+  const safeDesc = escapeHtml(team?.description || "");
+  const safeMax = Number(team?.max_members || 50);
+  const safeTeamId = escapeHtml(team?.id || "");
 
-    container.innerHTML = `
-    <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-medium">Edit Team</h3>
-        <button
+  container.innerHTML = `
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Team</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Update team metadata and limits.</p>
+      </div>
+      <button
+        type="button"
         onclick="document.getElementById('team-edit-modal').classList.add('hidden')"
-        class="text-gray-400 hover:text-gray-600 text-lg"
-        >
+        class="text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-gray-100 text-lg"
+      >
         ✕
-        </button>
+      </button>
     </div>
 
-    <form onsubmit="submitTeamUpdate(event, '${team.id}')">
+    <form onsubmit="submitTeamUpdate(event, '${safeTeamId}')">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Team Name</label>
+          <input
+            name="name"
+            value="${safeName}"
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] dark:focus:ring-[#f2b705]"
+            required
+          />
+        </div>
 
-      <input name="name"
-        value="${team.name}"
-        class="border w-full p-2 mb-2"
-        required />
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Description</label>
+          <textarea
+            name="description"
+            rows="3"
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] dark:focus:ring-[#f2b705]"
+          >${safeDesc}</textarea>
+        </div>
 
-      <textarea name="description"
-        class="border w-full p-2 mb-2">${team.description || ''}</textarea>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Visibility</label>
+          <select
+            name="visibility"
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] dark:focus:ring-[#f2b705]"
+          >
+            <option value="public" ${team.visibility === 'public' ? 'selected' : ''}>Public</option>
+            <option value="private" ${team.visibility === 'private' ? 'selected' : ''}>Private</option>
+          </select>
+        </div>
 
-      <select name="visibility"
-        class="border w-full p-2 mb-2">
-        <option value="public" ${team.visibility === 'public' ? 'selected' : ''}>Public</option>
-        <option value="private" ${team.visibility === 'private' ? 'selected' : ''}>Private</option>
-      </select>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Maximum Members</label>
+          <input
+            type="number"
+            name="max_members"
+            value="${safeMax}"
+            class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] dark:focus:ring-[#f2b705]"
+            placeholder="Max Members"
+          />
+        </div>
+      </div>
 
-      <input type="number"
-        name="max_members"
-        value="${team.max_members || ''}"
-        class="border w-full p-2 mb-4"
-        placeholder="Max Members" />
-
-      <button
-        type="submit"
-        class="w-full bg-indigo-600 text-white py-2 rounded">
-        Save Changes
-      </button>
+      <div class="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onclick="document.getElementById('team-edit-modal').classList.add('hidden')"
+          class="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-semibold"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 rounded-xl bg-[#2561C1] hover:bg-[#1f56ad] text-white text-sm font-semibold"
+        >
+          Save Changes
+        </button>
+      </div>
     </form>
+  </div>
   `;
 
   document.getElementById('team-edit-modal').classList.remove('hidden');
@@ -14694,13 +15264,13 @@ function requestToJoinTeamSafe(button) {
     return response.json();
     })
     .then(data => {
-    alert('Join request sent successfully!');
+    showSuccessMessage(data?.message || 'Join request sent successfully');
     button.disabled = true;
     button.innerText = 'Request Pending';
     })
     .catch(error => {
     console.error('Join request failed:', error);
-    alert(error.detail || 'Failed to send join request');
+    showErrorMessage(resolveTeamError(error, 'Failed to send join request'));
     });
 }
 
@@ -14725,14 +15295,14 @@ function leaveTeamSafe(button) {
     return response.json();
     })
     .then(data => {
-    alert(data.message || 'Successfully left the team');
+    showSuccessMessage(data?.message || 'Successfully left the team');
 
     // Refresh teams list
     loadTeamsByRelationship('all');
     })
     .catch(error => {
     console.error('Error leaving team:', error);
-    alert(error.detail || 'Failed to leave team');
+    showErrorMessage(resolveTeamError(error, 'Failed to leave team'));
     });
 }
 
@@ -14746,11 +15316,29 @@ function openJoinConfirm(button) {
   document.getElementById('join-confirm-team-name').textContent =
     `"${button.dataset.teamName}"`;
 
+  const errEl = document.getElementById('join-confirm-error');
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+
+  const confirmBtn = document.getElementById('confirm-join-btn');
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Request To Join';
+    confirmBtn.className = 'px-4 py-2 rounded-xl text-sm font-semibold bg-[#2561C1] hover:bg-[#1f56ad] text-white';
+  }
+
   modal.classList.remove('hidden');
 }
 
 function closeJoinConfirm() {
   document.getElementById('join-confirm-modal').classList.add('hidden');
+  const errEl = document.getElementById('join-confirm-error');
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
   pendingJoinTeamId = null;
   pendingJoinButton = null;
 }
@@ -14758,8 +15346,21 @@ function closeJoinConfirm() {
 async function confirmJoinRequest() {
   const modal = document.getElementById('join-confirm-modal');
   const teamId = modal.dataset.teamId;
+  const confirmBtn = document.getElementById('confirm-join-btn');
+  const errEl = document.getElementById('join-confirm-error');
 
   if (!teamId) return;
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Sending...';
+    confirmBtn.className = 'px-4 py-2 rounded-xl text-sm font-semibold bg-gray-300 text-gray-600 cursor-not-allowed dark:bg-gray-700 dark:text-gray-300';
+  }
 
   try {
     const res = await fetch(
@@ -14781,7 +15382,12 @@ async function confirmJoinRequest() {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(data.detail || 'Failed to send join request');
+      const msg = resolveTeamError(data, 'Failed to send join request');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+      }
+      showErrorMessage(msg);
       return;
     }
 
@@ -14791,10 +15397,21 @@ async function confirmJoinRequest() {
     // ✅ Refresh Discover list (same behavior as others)
     showDiscoverTeams();
 
-    alert(data.message || 'Join request sent successfully');
+    showSuccessMessage(data?.message || 'Join request sent successfully');
 
   } catch (err) {
-    alert(err.message || 'Unexpected error');
+    const msg = resolveTeamError(err, 'Unexpected error');
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.classList.remove('hidden');
+    }
+    showErrorMessage(msg);
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Request To Join';
+      confirmBtn.className = 'px-4 py-2 rounded-xl text-sm font-semibold bg-[#2561C1] hover:bg-[#1f56ad] text-white';
+    }
   }
 }
 
@@ -14824,7 +15441,7 @@ function submitTeamUpdate(event, teamId) {
     return response.json();
     })
     .then(data => {
-    alert('Team updated successfully!');
+    showSuccessMessage(data?.message || 'Team updated successfully');
     document.getElementById('team-edit-modal').classList.add('hidden');
 
     // Refresh teams list
@@ -14832,7 +15449,7 @@ function submitTeamUpdate(event, teamId) {
     })
     .catch(error => {
     console.error('Error updating team:', error);
-    alert(error.detail || 'Failed to update team');
+    showErrorMessage(resolveTeamError(error, 'Failed to update team'));
     });
 }
 
@@ -14860,7 +15477,7 @@ function manageTeamMembersSafe(button) {
       document.getElementById('team-edit-modal').classList.remove('hidden');
     })
     .catch(err => {
-      alert(err.detail || 'Failed to load team members');
+      showErrorMessage(resolveTeamError(err, 'Failed to load team members'));
     });
 }
 
@@ -14885,12 +15502,12 @@ function deleteTeamSafe(button) {
     return response.json();
   })
   .then(data => {
-    alert(data.message || 'Team deleted successfully');
+    showSuccessMessage(data?.message || 'Team deleted successfully');
     loadTeamsByRelationship('all'); // Refresh the teams list (JSON → HTML)
   })
   .catch(error => {
     console.error('Error deleting team:', error);
-    alert(error.detail || 'Failed to delete team');
+    showErrorMessage(resolveTeamError(error, 'Failed to delete team'));
   });
 }
 
@@ -14927,7 +15544,7 @@ function viewJoinRequestsSafe(button) {
   })
   .catch(error => {
     console.error('Error loading join requests:', error);
-    alert(error.detail || 'Failed to load join requests');
+    showErrorMessage(resolveTeamError(error, 'Failed to load join requests'));
   });
 }
 
@@ -14948,11 +15565,11 @@ function rejectJoinRequestSafe(button) {
     return res.json();
   })
   .then(() => {
-    alert('Join request rejected');
+    showSuccessMessage('Join request rejected');
     openJoinRequestsFromOptions(teamId); // reload modal content
     loadTeamsByRelationship('all');
   })
-  .catch(err => alert(err.detail || 'Failed to reject request'));
+  .catch(err => showErrorMessage(resolveTeamError(err, 'Failed to reject request')));
 }
 
 function approveJoinRequestSafe(button) {
@@ -14972,11 +15589,11 @@ function approveJoinRequestSafe(button) {
     return res.json();
   })
   .then(() => {
-    alert('Join request approved');
+    showSuccessMessage('Join request approved');
     loadTeamsByRelationship('all');
     document.getElementById('team-join-requests-modal').classList.add('hidden');
   })
-  .catch(err => alert(err.detail || 'Failed to approve request'));
+  .catch(err => showErrorMessage(resolveTeamError(err, 'Failed to approve request')));
 }
 
 function submitUserInvitation(event) {
@@ -14984,14 +15601,22 @@ function submitUserInvitation(event) {
 
   const form = event.target;
   const formData = new FormData(form);
+  const sendBtn = document.getElementById("invite-send-btn");
 
   const teamId = formData.get('team_id');
   const email = formData.get('email');
   const role = formData.get('role');
 
   if (!teamId || !email || !role) {
-    alert('Please fill all required fields');
+    showErrorMessage('Please fill all required fields');
+    setInviteInlineStatus('Please fill all required fields', 'error');
     return;
+  }
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+    sendBtn.className = 'px-4 py-2 rounded-xl bg-gray-300 text-gray-600 text-sm font-semibold cursor-not-allowed dark:bg-gray-700 dark:text-gray-300';
   }
 
   fetch(`${window.ROOT_PATH}/teams/${teamId}/invitations`, {
@@ -15012,13 +15637,24 @@ function submitUserInvitation(event) {
       return res.json();
     })
     .then(() => {
-      alert('Invitation sent successfully!');
-      document.getElementById('invite-user-modal').classList.add('hidden');
+      showSuccessMessage('Invitation sent successfully');
+      setInviteInlineStatus('Invitation sent successfully', 'success');
       form.reset();
+      const searchInput = document.getElementById('invite-user-search');
+      if (searchInput) searchInput.value = '';
+      loadPendingInvitations(teamId);
+      loadInviteUserDropdown(teamId);
     })
     .catch(err => {
       console.error('Invite failed:', err);
-      alert(err.detail || 'Failed to send invitation');
+      showErrorMessage(resolveTeamError(err, 'Failed to send invitation'));
+      setInviteInlineStatus(resolveTeamError(err, 'Failed to send invitation'), 'error');
+    })
+    .finally(() => {
+      if (sendBtn) {
+        sendBtn.textContent = 'Send Invitation';
+      }
+      updateInviteSendButtonState();
     });
 }
 
@@ -15051,7 +15687,7 @@ function changeMemberRole(selectEl) {
     return res.json().catch(() => ({}));
   })
   .then(data => {
-    alert(data.message || 'Role updated successfully');
+    showSuccessMessage(data?.message || 'Role updated successfully');
 
     // update stored current role
     selectEl.dataset.currentRole = newRole;
@@ -15060,7 +15696,7 @@ function changeMemberRole(selectEl) {
     openMembersFromOptions(teamId, true);
   })
   .catch(err => {
-    alert(err.detail || 'Failed to update role');
+    showErrorMessage(resolveTeamError(err, 'Failed to update role'));
 
     // revert role visually
     selectEl.value = currentRole;
@@ -15086,7 +15722,7 @@ function removeTeamMember(button) {
     return res.json().catch(() => ({}));
   })
   .then(() => {
-    alert('Member removed successfully');
+    showSuccessMessage('Member removed successfully');
 
     // Refresh members modal
     openMembersFromOptions(teamId, true);
@@ -15095,7 +15731,7 @@ function removeTeamMember(button) {
     loadTeamsByRelationship('all');
   })
   .catch(err => {
-    alert(err.detail || 'Failed to remove member');
+    showErrorMessage(resolveTeamError(err, 'Failed to remove member'));
   });
 }
 
@@ -15108,7 +15744,15 @@ function openInviteUserModal(teamId) {
 
 function closeInviteUserModal() {
   document.getElementById('invite-user-modal').classList.add('hidden');
+  ensureInviteState();
+  inviteUserDirectory = [];
+  invitePendingEmails = new Set();
+  window.inviteUserDirectory = inviteUserDirectory;
+  window.invitePendingEmails = invitePendingEmails;
+  clearInviteInlineStatus();
 }
+
+window.filterTeams = filterTeams;
 
 function revokeInvitation(teamId, invitationId) {
   if (!confirm("Revoke this invitation?")) return;
@@ -15126,11 +15770,14 @@ function revokeInvitation(teamId, invitationId) {
     return res.json();
   })
   .then(data => {
-    alert(data.message || 'Invitation revoked successfully');
-    showInviteTab('pending');  // refresh list
+    showSuccessMessage(data?.message || 'Invitation revoked successfully');
+    setInviteInlineStatus(data?.message || 'Invitation revoked successfully', 'success');
+    loadPendingInvitations(teamId);
+    loadInviteUserDropdown(teamId);
   })
   .catch(err => {
-    alert(err.detail || 'Failed to revoke invitation');
+    showErrorMessage(resolveTeamError(err, 'Failed to revoke invitation'));
+    setInviteInlineStatus(resolveTeamError(err, 'Failed to revoke invitation'), 'error');
   });
 }
 
@@ -17373,5 +18020,3 @@ console.log("✅ RBAC globals ready:", {
 if (typeof testTool !== 'undefined') window.testTool = testTool;
 if (typeof viewTool !== 'undefined') window.viewTool = viewTool;
 if (typeof editTool !== 'undefined') window.editTool = editTool;
-
-

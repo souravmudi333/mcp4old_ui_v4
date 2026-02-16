@@ -80,7 +80,7 @@
     </script>
   </head>
   <body
-    class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden"
+    class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-x-hidden overflow-y-auto lg:overflow-hidden"
   >
     <!-- Top header / product bar -->
     <header
@@ -107,17 +107,19 @@
       </div>
       <div class="flex items-center gap-3 pointer-events-auto">
         <span
+          id="gateway-status-badge"
           class="px-3 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/40"
         >
           <span
+            id="gateway-status-dot"
             class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"
           ></span>
-          Gateway: Online
+          Gateway: <span id="gateway-status-text" class="font-semibold">Checking...</span>
         </span>
         <span
           class="px-3 py-1 rounded-full text-[11px] bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-900/70 dark:text-slate-300 dark:border-slate-700/70"
         >
-          Environment: <span class="font-semibold">Staging</span>
+          Environment: <span id="environment-badge-value" class="font-semibold">Detecting...</span>
         </span>
 
         <!-- Theme toggle -->
@@ -210,6 +212,8 @@
             <!-- Error messages -->
             <div
               id="error-message"
+              role="alert"
+              aria-live="polite"
               class="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs hidden dark:bg-red-900/15 dark:border-red-500/50 dark:text-red-200"
             >
               <div class="flex items-center">
@@ -305,11 +309,18 @@
                   <button
                     type="button"
                     onclick="togglePassword()"
-                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                    aria-label="Toggle password visibility"
+                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md"
                   >
                     <i id="password-icon" class="fas fa-eye text-xs"></i>
                   </button>
                 </div>
+                <p
+                  id="caps-lock-warning"
+                  class="mt-1.5 text-[11px] text-amber-700 dark:text-amber-300 hidden"
+                >
+                  Caps Lock is on.
+                </p>
               </div>
 
               <button
@@ -565,6 +576,73 @@
         }
       }
 
+      function detectEnvironmentLabel() {
+        const host = (window.location.hostname || "").toLowerCase();
+        if (
+          host.includes("localhost") ||
+          host.startsWith("127.") ||
+          host.startsWith("0.0.0.0")
+        ) {
+          return "Local";
+        }
+        if (host.includes("staging") || host.includes("stage")) return "Staging";
+        if (host.includes("dev") || host.includes("test")) return "Development";
+        return "Production";
+      }
+
+      async function initializeStatusBadges() {
+        const envEl = document.getElementById("environment-badge-value");
+        const statusTextEl = document.getElementById("gateway-status-text");
+        const statusDotEl = document.getElementById("gateway-status-dot");
+        const statusBadgeEl = document.getElementById("gateway-status-badge");
+
+        if (envEl) {
+          envEl.textContent = detectEnvironmentLabel();
+        }
+
+        if (!statusTextEl || !statusDotEl || !statusBadgeEl) return;
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3000);
+          const resp = await fetch(window.ROOT_PATH + "/health", {
+            signal: controller.signal,
+            credentials: "same-origin",
+          });
+          clearTimeout(timeout);
+
+          if (resp.ok) {
+            statusTextEl.textContent = "Online";
+            statusDotEl.className =
+              "w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft";
+            statusBadgeEl.className =
+              "px-3 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/40";
+          } else {
+            throw new Error("health endpoint unavailable");
+          }
+        } catch (_) {
+          statusTextEl.textContent = "Offline";
+          statusDotEl.className = "w-1.5 h-1.5 rounded-full bg-red-500";
+          statusBadgeEl.className =
+            "px-3 py-1 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200 flex items-center gap-1.5 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/40";
+        }
+      }
+
+      function setupCapsLockWarning() {
+        const passwordField = document.getElementById("password");
+        const warning = document.getElementById("caps-lock-warning");
+        if (!passwordField || !warning) return;
+
+        const toggleWarning = (event) => {
+          const isCapsLockOn = event.getModifierState && event.getModifierState("CapsLock");
+          warning.classList.toggle("hidden", !isCapsLockOn);
+        };
+
+        passwordField.addEventListener("keydown", toggleWarning);
+        passwordField.addEventListener("keyup", toggleWarning);
+        passwordField.addEventListener("blur", () => warning.classList.add("hidden"));
+      }
+
       // Initialize page
       document.addEventListener("DOMContentLoaded", async function () {
         // Initialize theme toggle state
@@ -585,8 +663,10 @@
           });
         }
 
+        await initializeStatusBadges();
         await loadSSOProviders();
         handleErrorMessages();
+        setupCapsLockWarning();
         setupAnimations();
       });
 
@@ -620,7 +700,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.onclick = () => initiateSSO(provider.id);
-            button.className = `w-full flex justify-center items-center py-3 px-4 rounded-xl font-medium transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${config.bgColor} ${config.textColor} ${config.border || ""}`;
+            button.className = `w-full flex justify-center items-center py-3 px-4 rounded-xl font-medium transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 ${config.bgColor} ${config.textColor} ${config.border || ""}`;
 
             button.innerHTML = `
                     <i class="${config.icon} mr-3 text-lg"></i>
@@ -706,11 +786,6 @@
         const errorText = document.getElementById("error-text");
         errorText.textContent = message;
         errorDiv.classList.remove("hidden");
-
-        // Auto-hide after 10 seconds
-        setTimeout(() => {
-          errorDiv.classList.add("hidden");
-        }, 10000);
       }
 
       // Toggle password visibility
@@ -745,6 +820,10 @@
         // Add loading state to form submission
         const form = document.querySelector("form");
         form.addEventListener("submit", function () {
+          const errorDiv = document.getElementById("error-message");
+          if (errorDiv) {
+            errorDiv.classList.add("hidden");
+          }
           const submitBtn = form.querySelector('button[type="submit"]');
           submitBtn.innerHTML =
             '<i class="fas fa-spinner fa-spin mr-2"></i>Signing in...';

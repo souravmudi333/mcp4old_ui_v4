@@ -4677,6 +4677,7 @@ class TeamDiscoveryResponse(BaseModel):
     member_count: int = Field(..., description="Number of team members")
     created_at: datetime = Field(..., description="Team creation timestamp")
     is_joinable: bool = Field(..., description="Whether the current user can join this team")
+    requested: bool = Field(False, description="Whether current user already has a pending join request")
 
 
 class TeamJoinRequest(BaseModel):

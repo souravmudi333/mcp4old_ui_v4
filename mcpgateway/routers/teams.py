@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 # First-Party
 from mcpgateway.auth import get_current_user
-from mcpgateway.db import get_db, EmailTeamMember, EmailTeam
+from mcpgateway.db import get_db, EmailTeamMember, EmailTeam, EmailTeamJoinRequest
 from mcpgateway.middleware.rbac import get_current_user_with_permissions, require_permission
 from mcpgateway.schemas import (
     EmailUserResponse,
@@ -130,6 +130,20 @@ async def list_teams(
         # ----------------------------
         if is_admin:
             teams, total = await service.list_teams(limit=limit, offset=skip)
+
+            # Keep admin behavior (all teams) but also include admin's personal team
+            # so UI reflects personal-team naming consistently.
+            admin_user_teams = await service.get_user_teams(
+                user_email,
+                include_personal=True,
+            )
+            admin_personal_team = next(
+                (t for t in admin_user_teams if getattr(t, "is_personal", False)),
+                None,
+            )
+            if skip == 0 and admin_personal_team is not None and all(t.id != admin_personal_team.id for t in teams):
+                teams = [admin_personal_team] + list(teams)
+                total += 1
         else:
             teams = await service.get_user_teams(
                 user_email,
@@ -227,6 +241,20 @@ async def discover_public_teams(
         if public_teams is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No Public teams found")
         else:
+            team_ids = [team.id for team in public_teams if getattr(team, "id", None)]
+            pending_requested_ids = set()
+            if team_ids:
+                pending_rows = (
+                    db.query(EmailTeamJoinRequest.team_id)
+                    .filter(
+                        EmailTeamJoinRequest.user_email == current_user_ctx["email"],
+                        EmailTeamJoinRequest.status == "pending",
+                        EmailTeamJoinRequest.team_id.in_(team_ids),
+                    )
+                    .all()
+                )
+                pending_requested_ids = {row[0] for row in pending_rows if row and row[0]}
+
             discovery_responses = []
             for team in public_teams:
                 discovery_responses.append(
@@ -237,6 +265,7 @@ async def discover_public_teams(
                         member_count=team.get_member_count(),
                         created_at=team.created_at,
                         is_joinable=True,  # All returned teams are joinable
+                        requested=team.id in pending_requested_ids,
                     )
                 )
 

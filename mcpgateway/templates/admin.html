@@ -81,9 +81,9 @@
 
       /* Team management styles */
       .filter-btn.active {
-        background-color: #4f46e5 !important;
+        background-color: #2561C1 !important;
         color: white !important;
-        border-color: #4f46e5 !important;
+        border-color: #2561C1 !important;
       }
 
       .team-card {
@@ -307,13 +307,21 @@
         <div class="grid grid-cols-[auto_1fr_auto] items-center gap-2 w-full">
           <!-- LEFT: logo -->
           <div class="flex items-center">
-            <img
-              src="{{ root_path }}/static/cogentiq1.png"
-              alt="Cogentiq Logo"
-              class="header-logo ml-3 mt-2"
-              height="50"
-              width="180"
-            />
+            <button
+              type="button"
+              id="logo-home-button"
+              class="focus:outline-none"
+              title="Go to MCP Servers"
+              aria-label="Go to MCP Servers"
+            >
+              <img
+                src="{{ root_path }}/static/cogentiq1.png"
+                alt="Cogentiq Logo"
+                class="header-logo ml-3 mt-2"
+                height="50"
+                width="180"
+              />
+            </button>
           </div>
 
           <!-- CENTER: title and subtitle -->
@@ -365,7 +373,7 @@
               x-data="{
                 open: false,
                 selectedTeam: '',
-                selectedTeamName: 'Teams',
+                selectedTeamName: 'All Teams',
                 teams: [],
                 init() {
                     // Load teams data from window object
@@ -373,10 +381,10 @@
 
                     // Get team from URL parameter
                     const urlParams = new URLSearchParams(window.location.search);
-                    this.selectedTeam = urlParams.get('team_id') || '';
+                    this.selectedTeam = (urlParams.get('team_id') || '').toString();
                     if (this.selectedTeam) {
-                        const team = this.teams.find(t => t.id === this.selectedTeam);
-                        this.selectedTeamName = team ? (team.is_personal ? '👤 ' + team.name : '🏢 ' + team.name) : 'All Teams';
+                        const team = this.teams.find(t => String(t.id) === this.selectedTeam);
+                        this.selectedTeamName = team ? team.name : 'All Teams';
                     }
                 }
             }"
@@ -428,24 +436,29 @@
                     class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     role="menuitem"
                   >
-                    <!-- 🌐-->Teams 
+                    <div class="flex flex-col">
+                      <span class="font-medium">All Teams</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400">
+                        All members • All visibility
+                      </span>
+                    </div>
                   </button>
 
                   <!-- User Teams -->
                   <template x-for="team in teams" :key="team.id">
                     <button
-                      @click="selectedTeam = team.id; selectedTeamName = (team.is_personal ? '👤 ' : '🏢 ') + team.name; open = false; updateTeamContext(team.id)"
+                      @click="selectedTeam = String(team.id); selectedTeamName = team.name; open = false; updateTeamContext(String(team.id))"
                       class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       role="menuitem"
-                      x-bind:class="selectedTeam === team.id ? 'bg-blue-50 dark:bg-blue-900' : ''"
+                      x-bind:class="selectedTeam === String(team.id) ? 'bg-blue-50 dark:bg-blue-900' : ''"
                     >
-                      <span
-                        x-text="(team.is_personal ? '👤 ' : '🏢 ') + team.name"
-                      ></span>
-                      <span
-                        class="text-xs text-white dark:text-gray-400 ml-2"
-                        x-text="team.member_count + ' members'"
-                      ></span>
+                      <div class="flex flex-col">
+                        <span class="font-medium" x-text="team.name"></span>
+                        <span
+                          class="text-xs text-gray-500 dark:text-gray-400"
+                          x-text="(team.member_count || 0) + ' members • ' + ((team.visibility || 'private').toLowerCase() === 'public' ? 'Public' : 'Private')"
+                        ></span>
+                      </div>
                     </button>
                   </template>
                 </div>
@@ -751,7 +764,6 @@
               id="tab-teams"
               data-testid="teams-tab"
               class="tab-link border-transparent text-gray-500 dark:text-gray-300  hover:bg-white whitespace-nowrap py-2 px-2 border-b-2 font-medium text-sm rounded-md"
-              onclick="showTab('teams')"
             >
               Teams
             </a>
@@ -762,177 +774,96 @@
 
       <!-- Logs Panel -->
       <div id="logs-panel" class="tab-panel hidden">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-              <h2
-                class="text-lg font-medium text-gray-900 dark:text-white mb-4"
-              >
-                System Logs
-              </h2>
-
-              <!-- Log Filters -->
-              <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >Level</label
-                  >
-                  <select
-                    id="log-level-filter"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-gray-700 dark:border-gray-600 text-gray-700 dark:text-gray-300"
-                  >
-                    <option value="">All Levels</option>
-                    <option value="debug">Debug</option>
-                    <option value="info">Info</option>
-                    <option value="warning">Warning</option>
-                    <option value="error">Error</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >Entity Type</label
-                  >
-                  <select
-                    id="log-entity-filter"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm dark:bg-gray-700 dark:border-gray-600 text-gray-700 dark:text-gray-300"
-                  >
-                    <option value="">All Types</option>
-                    <option value="tool">Tool</option>
-                    <option value="resource">Resource</option>
-                    <option value="server">Server</option>
-                    <option value="gateway">Gateway</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >Search</label
-                  >
-                  <input
-                    type="text"
-                    id="log-search"
-                    placeholder="Search logs..."
-                    class="mt-1 textfield border-gray-300 rounded-md shadow-sm dark:bg-gray-700 dark:border-gray-600 text-gray-700 dark:text-gray-300"
-                  />
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="mb-4 flex gap-2">
-                <button
-                  onclick="refreshLogs()"
-                  class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Refresh
-                </button>
-                <button
-                  onclick="toggleLogStream()"
-                  id="stream-toggle"
-                  class="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                >
-                  Start Live Stream
-                </button>
-                <button
-                  onclick="exportLogs('json')"
-                  class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                >
-                  Export JSON
-                </button>
-                <button
-                  onclick="exportLogs('csv')"
-                  class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                >
-                  Export CSV
-                </button>
-                <button
-                  onclick="showLogFiles()"
-                  class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-                >
-                  Download Files
-                </button>
-              </div>
-
-              <!-- Log Stats -->
-              <div
-                id="log-stats"
-                class="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
-              >
-                <span class="text-sm text-gray-600 dark:text-gray-300"
-                  >Loading stats...</span
-                >
-              </div>
-
-              <!-- Log Table -->
-              <div class="overflow-x-auto">
-                <table
-                  class="min-w-full divide-y divide-gray-200 dark:divide-gray-700"
-                >
-                  <thead class="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th
-                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-                      >
-                        Time
-                      </th>
-                      <th
-                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-                      >
-                        Level
-                      </th>
-                      <th
-                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-                      >
-                        Entity
-                      </th>
-                      <th
-                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-                      >
-                        Message
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody
-                    id="logs-tbody"
-                    class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
-                  >
-                    <!-- Logs will be inserted here -->
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Pagination -->
-              <div class="mt-4 flex justify-between items-center">
-                <div>
-                  <span
-                    id="log-count"
-                    class="text-sm text-gray-600 dark:text-gray-300"
-                    >0 logs</span
-                  >
-                </div>
-                <div class="flex gap-2">
-                  <button
-                    onclick="previousLogPage()"
-                    id="prev-page"
-                    class="px-3 py-1 bg-gray-300 dark:bg-gray-600 rounded disabled:opacity-50"
-                    disabled
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onclick="nextLogPage()"
-                    id="next-page"
-                    class="px-3 py-1 bg-gray-300 dark:bg-gray-600 rounded disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+        <div class="logs-header-card p-6 sm:p-8">
+          <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 class="logs-title text-2xl font-bold">System Logs</h2>
+              <p class="logs-subtitle mt-1 text-sm">
+                Filter, stream, and export system events for debugging and operations.
+              </p>
             </div>
+            <div id="log-count" class="text-sm font-medium text-gray-600 dark:text-gray-300">0 logs</div>
+          </div>
+        </div>
+
+        <div class="logs-surface-card mt-4 p-6">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Level</label>
+              <select id="log-level-filter" class="logs-input mt-1 block w-full">
+                <option value="">All Levels</option>
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Entity Type</label>
+              <select id="log-entity-filter" class="logs-input mt-1 block w-full">
+                <option value="">All Types</option>
+                <option value="tool">Tool</option>
+                <option value="resource">Resource</option>
+                <option value="server">Server</option>
+                <option value="gateway">Gateway</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Search</label>
+              <input type="text" id="log-search" placeholder="Search logs..." class="logs-input mt-1 w-full" />
+            </div>
+          </div>
+
+          <div class="mt-5 flex flex-wrap gap-2">
+            <button onclick="refreshLogs()" class="logs-btn-primary px-3 py-2 text-sm font-semibold">Refresh</button>
+            <button onclick="toggleLogStream()" id="stream-toggle" class="logs-btn-success px-3 py-2 text-sm font-semibold">Start Live Stream</button>
+            <button onclick="exportLogs('json')" class="logs-btn-secondary px-3 py-2 text-sm font-semibold">Export JSON</button>
+            <button onclick="exportLogs('csv')" class="logs-btn-secondary px-3 py-2 text-sm font-semibold">Export CSV</button>
+            <button onclick="showLogFiles()" class="logs-btn-secondary px-3 py-2 text-sm font-semibold">Download Files</button>
+          </div>
+
+          <div id="log-stats" class="mt-4 logs-stats-chip p-3 text-sm text-gray-700 dark:text-gray-300">
+            <span>Loading stats...</span>
+          </div>
+
+          <div class="logs-table-wrap mt-4">
+            <table class="logs-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead>
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Time</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Level</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Entity</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Message</th>
+                </tr>
+              </thead>
+              <tbody
+                id="logs-tbody"
+                class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
+              >
+                <!-- Logs will be inserted here -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 flex items-center justify-end gap-2">
+            <button
+              onclick="previousLogPage()"
+              id="prev-page"
+              class="logs-btn-secondary px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+              disabled
+            >
+              Previous
+            </button>
+            <button
+              onclick="nextLogPage()"
+              id="next-page"
+              class="logs-btn-secondary px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
@@ -1411,7 +1342,7 @@
               id="search-servers"
               data-testid="search-input"
               placeholder="Search servers..."
-              class="textfield w-[280px] rounded-md border border-gray-300 dark:border-gray-700 shadow-sm focus:figma-blue-border focus:ring-indigo-500 dark:bg-gray-900 dark:placeholder-gray-300 dark:text-gray-300"
+              class="textfield w-[280px] rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900 placeholder-gray-400 dark:placeholder-gray-500"
               oninput="filterServerTable(this.value)"
             />
 
@@ -2141,9 +2072,19 @@
             </div>
           </div>
 
-          <div class="flex items-center">
-            <input type="checkbox" id="show-inactive-tools" class="mr-2" onchange="toggleInactiveItems('tools')" />
-            <label for="show-inactive-tools" class="text-sm font-medium text-gray-700 dark:text-gray-300">Show Inactive</label>
+          <div class="flex items-center gap-4 flex-nowrap">
+            <input
+              type="text"
+              id="search-tools-cards"
+              data-testid="search-tools-cards-input"
+              placeholder="Search tools..."
+              class="textfield w-[280px] rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900 placeholder-gray-400 dark:placeholder-gray-500"
+              oninput="filterToolCards(this.value)"
+            />
+            <div class="flex items-center">
+              <input type="checkbox" id="show-inactive-tools" class="mr-2" onchange="toggleInactiveItems('tools')" />
+              <label for="show-inactive-tools" class="text-sm font-medium text-gray-700 dark:text-gray-300">Show Inactive</label>
+            </div>
           </div>
         </div>
 
@@ -3186,6 +3127,7 @@
           </form>
         </div>
       </div>
+      </div>
 
       <!-- Resources Panel -->
       <!-- <div id="resources-panel" class="tab-panel hidden">
@@ -3975,18 +3917,28 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             </div>
           </div>
          
-          <div class="flex items-center">
+          <div class="flex items-center gap-4 flex-nowrap">
             <input
-              type="checkbox"
-              id="show-inactive-gateways"
-              class="mr-2"
-              onchange="toggleInactiveItems('gateways')"
+              type="text"
+              id="search-gateways"
+              data-testid="search-gateways-input"
+              placeholder="Search gateways..."
+              class="textfield w-[280px] rounded-md border border-gray-300 dark:border-gray-400 shadow-sm focus:figma-blue-border focus:ring-indigo-500 bg-white dark:bg-white text-gray-900 dark:text-gray-900 placeholder-gray-400 dark:placeholder-gray-500"
+              oninput="filterGatewayTable(this.value)"
             />
-            <label
-              for="show-inactive-gateways"
-              class="text-sm font-medium text-gray-700 dark:text-gray-300"
-              >Show Inactive</label
-            >
+            <div class="flex items-center">
+              <input
+                type="checkbox"
+                id="show-inactive-gateways"
+                class="mr-2"
+                onchange="toggleInactiveItems('gateways')"
+              />
+              <label
+                for="show-inactive-gateways"
+                class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >Show Inactive</label
+              >
+            </div>
           </div>
         </div>
 
@@ -4773,99 +4725,260 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             ></p>
           </div>
         </div>
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <!-- Header with Create Team Button -->
-          <div class="flex justify-between items-center mb-8">
-            <div>
-              <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-200">
-                👥 My Teams
-              </h2>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Teams you own, are a member of, and can join
-              </p>
+        <div class="w-full">
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-2 relative">
+              <h2 class="figma-header font-bold dark:text-gray-200">Teams</h2>
+              <div class="relative group">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="w-5 h-5 text-gray-500 dark:text-gray-400 cursor-pointer">
+                  <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708
+                    3.542a.75.75 0 001.063.852l.041-.02M12
+                    6.75h.008v.008H12V6.75zm9.75
+                    5.25a9.75 9.75 0 11-19.5 0
+                    9.75 9.75 0 0119.5 0z" />
+                </svg>
+                <div class="absolute left-1/2 -translate-x-1/2 top-8
+                  hidden group-hover:block w-72 p-2 sub-header
+                  bg-gray-800 text-white rounded-lg shadow-lg z-10">
+                  Manage teams you own, teams you are part of, and discover public teams to join.
+                </div>
+              </div>
             </div>
+
             <button
               id="create-team-btn"
+              type="button"
               onclick="openCreateTeamModal()"
-              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-[#2561C1] text-white hover:bg-[#1f56ad] transition-all shadow-sm"
             >
-              <svg
-                class="-ml-1 mr-2 h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 8v8M8 12h8"></path>
               </svg>
-              Create New Team
+              <span>Create Team</span>
             </button>
           </div>
 
-          <!-- Search/Filter Bar -->
-          <div class="mb-6">
-            <div class="flex flex-col sm:flex-row gap-4">
-              <div class="flex-1">
-                <input
-                  type="text"
-                  id="team-search"
-                  placeholder="Find teams..."
-                  class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:figma-blue-border dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  oninput="filterTeams(this.value)"
-                />
-              </div>
-              <div class="flex gap-2">
+          <div class="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap gap-2">
                 <button
                   onclick="onTeamFilterClick(this, 'all')"
-                  class="filter-btn active px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-white dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  class="filter-btn active px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-[#2561C1] text-white"
                   data-filter="all"
                 >
-                  All Teams
+                  All
                 </button>
                 <button
                   onclick="onTeamFilterClick(this, 'owner')"
                   class="filter-btn px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
                   data-filter="owner"
                 >
-                  I Own
+                  Owner
                 </button>
                 <button
                   onclick="onTeamFilterClick(this, 'member')"
                   class="filter-btn px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
                   data-filter="member"
                 >
-                  I'm a Member
+                  Member
                 </button>
                 <button
                   onclick="onTeamFilterClick(this, 'public')"
                   class="filter-btn px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
                   data-filter="public"
                 >
-                  Can Join
+                  Discover
                 </button>
                 <button
-                  class="filter-btn bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded"
+                  class="filter-btn px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
                   onclick="onTeamFilterClick(this, 'invitations')"
+                  data-filter="invitations"
                 >
                   Invitations
                 </button>
+                <button
+                  id="team-filter-others"
+                  class="filter-btn hidden px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  onclick="onTeamFilterClick(this, 'others')"
+                >
+                  Other Teams
+                </button>
+              </div>
+
+              <div class="ml-auto">
+                <input
+                  type="text"
+                  id="team-search"
+                  placeholder="Search teams..."
+                  class="w-[320px] max-w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 text-sm text-gray-900 bg-white placeholder-gray-400 focus:figma-blue-border focus:ring-indigo-500"
+                  oninput="filterTeams(this.value)"
+                />
               </div>
             </div>
           </div>
-          
-          <!-- Teams List -->
+
           <div
             id="teams-list"
-            class="space-y-4"
+            class="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6"
           >
-            <div class="text-center py-8">
+            <div class="col-span-full text-center py-8">
               <div class="animate-pulse text-gray-500 dark:text-gray-400">
                 Loading teams...
               </div>
+            </div>
+          </div>
+
+          <div id="team-create-content" class="hidden mt-4 w-full">
+            <div
+              class="bg-white dark:bg-gray-800 
+                    border border-gray-200 dark:border-gray-700
+                    rounded-2xl shadow-sm p-8 transition-all"
+            >
+              <div class="flex items-center justify-between mb-6">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Create New Team
+                  </h3>
+                  <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Create a team, set visibility, and define member limits.
+                  </p>
+                </div>
+
+                <span
+                  class="px-3 py-1 text-xs font-semibold rounded-full 
+                        bg-[#f2b705]/10 text-[#7a5200] 
+                        dark:bg-[#f2b705]/20 dark:text-[#ffe08a]"
+                >
+                  CREATE
+                </span>
+              </div>
+
+              <div class="border-b border-gray-200 dark:border-gray-700 mb-8"></div>
+
+              <div id="create-team-error" class="hidden mb-3 text-sm text-red-600 dark:text-red-400"></div>
+
+              <form id="create-team-form" onsubmit="submitCreateTeam(event)">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                  <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Team Name
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      id="team-name"
+                      required
+                      maxlength="100"
+                      class="mt-2 block w-full rounded-lg border border-gray-300 dark:border-gray-700
+                            bg-white dark:bg-gray-900
+                            px-3 py-2 text-sm text-gray-900 dark:text-gray-200
+                            placeholder-gray-400 dark:placeholder-gray-500
+                            focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] focus:border-[#0b1f3a]
+                            dark:focus:ring-[#f2b705] transition"
+                      placeholder="Development Team"
+                    />
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Maximum 100 characters.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Maximum Members
+                    </label>
+                    <input
+                      type="number"
+                      name="max_members"
+                      id="team-max-members"
+                      min="1"
+                      max="1000"
+                      value="50"
+                      class="mt-2 block w-full rounded-lg border border-gray-300 dark:border-gray-700
+                            bg-white dark:bg-gray-900
+                            px-3 py-2 text-sm text-gray-900 dark:text-gray-200
+                            placeholder-gray-400 dark:placeholder-gray-500
+                            focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] focus:border-[#0b1f3a]
+                            dark:focus:ring-[#f2b705] transition"
+                    />
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Optional, defaults to 50.
+                    </p>
+                  </div>
+
+                  <div class="col-span-1 md:col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Description
+                    </label>
+                    <textarea
+                      name="description"
+                      id="team-description"
+                      rows="3"
+                      maxlength="500"
+                      class="mt-2 block w-full rounded-lg border border-gray-300 dark:border-gray-700
+                            bg-white dark:bg-gray-900
+                            px-3 py-2 text-sm text-gray-900 dark:text-gray-200
+                            placeholder-gray-400 dark:placeholder-gray-500
+                            focus:outline-none focus:ring-2 focus:ring-[#0b1f3a] focus:border-[#0b1f3a]
+                            dark:focus:ring-[#f2b705] transition"
+                      placeholder="Brief description of the team's purpose..."
+                    ></textarea>
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Optional, maximum 500 characters.
+                    </p>
+                  </div>
+
+                  <div class="col-span-1 md:col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Team Visibility
+                    </label>
+                    <div class="mt-3 flex flex-wrap gap-6">
+                      <label class="flex items-center gap-2">
+                        <input type="radio" name="visibility" value="private" checked class="h-5 w-5" />
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Private</span>
+                      </label>
+                      <label class="flex items-center gap-2">
+                        <input type="radio" name="visibility" value="public" class="h-5 w-5" />
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Public</span>
+                      </label>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Public teams are discoverable and users can request to join.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="mt-8 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onclick="closeCreateTeamModal()"
+                    class="inline-flex items-center px-6 py-2.5
+                          border border-gray-300 dark:border-gray-600
+                          text-gray-700 dark:text-gray-200
+                          bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800
+                          font-semibold text-sm rounded-xl shadow-sm transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="inline-flex items-center px-6 py-2.5
+                          bg-[#2561C1] hover:bg-[#1f56ad]
+                          text-white font-semibold text-sm
+                          rounded-xl shadow-sm transition-all"
+                  >
+                    Create Team
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -7199,85 +7312,28 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
 
       <!-- Metrics Panel -->
       <div id="metrics-panel" class="tab-panel hidden">
-        <div class="bg-white shadow rounded-lg p-6 dark:bg-gray-800">
-          <h2 class="text-2xl font-bold dark:text-gray-200 mb-4">
-            Aggregated Metrics
-          </h2>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Metrics provide visibility into Tool, Resource, Prompt, and Server
-            usage across your Gateway-helpful for debugging and optimization.
-          </p>
-
-          <!-- Refresh button (also auto-refreshes when the tab is selected) -->
-          <button
-            onclick="loadAggregatedMetrics()"
-            class="mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
-          >
-            Refresh Metrics
-          </button>
-
-          <!-- Aggregated Metrics Table -->
-          <div
-            id="aggregated-metrics-content"
-            class="overflow-auto mb-6 bg-gray-100"
-          ></div>
-
-          <!-- Overall Bar Chart for Total Executions -->
-          <canvas
-            id="metricsChart"
-            width="400"
-            height="200"
-            class="bg-white"
-          ></canvas>
-
-          <hr class="my-6" />
-
-          <!-- Expandable sections for top items -->
-          <details id="top-tools-details" class="mb-4">
-            <summary
-              class="text-xl font-semibold cursor-pointer dark:text-gray-200"
+        <div class="metrics-header-card p-6 sm:p-8">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 class="metrics-title text-2xl font-bold">Gateway Metrics</h2>
+              <p class="metrics-subtitle mt-1 text-sm">
+                Track tool, gateway, and server usage to spot failures and optimize performance.
+              </p>
+            </div>
+            <button
+              onclick="loadAggregatedMetrics()"
+              class="metrics-primary-btn inline-flex items-center justify-center px-4 py-2 text-sm font-semibold"
             >
-              Top Tools by Executions
-            </summary>
-            <div id="top-tools-content" class="mt-4"></div>
-          </details>
-
-<!--           
-          <details id="top-resources-details" class="mb-4">
-            <summary
-              class="text-xl font-semibold cursor-pointer dark:text-gray-200"
-            >
-              Top Resources by Executions
-            </summary>
-            <div id="top-resources-content" class="mt-4"></div>
-          </details>
- -->
-
-          <details id="top-servers-details" class="mb-4">
-            <summary
-              class="text-xl font-semibold cursor-pointer dark:text-gray-200"
-            >
-              Top Servers by Executions
-            </summary>
-            <div id="top-servers-content" class="mt-4"></div>
-          </details>
-
-
-          <!-- <details id="top-prompts-details" class="mb-4">
-            <summary
-              class="text-xl font-semibold cursor-pointer dark:text-gray-200"
-            >
-              Top Prompts by Executions
-            </summary>
-            <div id="top-prompts-content" class="mt-4"></div>
-          </details> -->
+              Refresh Metrics
+            </button>
+          </div>
         </div>
       </div>
 
 
       <!-- Modals -->
       <!-- Tool Detail Modal -->
-      <div id="tool-modal" class="fixed z-10 inset-0 overflow-y-auto hidden">
+      <div id="tool-modal" class="fixed z-50 inset-0 overflow-y-auto hidden">
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
         >
@@ -7285,26 +7341,37 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Tool Details
-              </h3>
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Tool Details
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Configuration, schema, metrics, and metadata for this tool.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  VIEW
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
               <div
-                class="mt-4 space-y-4 bg-white dark:bg-gray-900"
+                class="space-y-4"
                 id="tool-details"
               ></div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8"
             >
               <button
                 type="button"
                 onclick="closeModal('tool-modal')"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-primary w-full sm:w-auto inline-flex justify-center px-6 py-2.5 text-sm font-semibold"
               >
                 Close
               </button>
@@ -7316,7 +7383,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Tool Test Modal -->
       <div
         id="tool-test-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -7326,77 +7393,107 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
           </div>
           <!-- Increased max width (sm:max-w-2xl) for a larger modal -->
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3
-                id="tool-test-modal-title"
-                class="text-lg font-medium text-gray-900 dark:text-gray-100"
-              >
-                Test Tool
-              </h3>
-              <!-- New container to show the tool's description -->
-              <div
-                id="tool-test-modal-description"
-                class="mb-4 text-gray-700 dark:text-gray-400"
-              ></div>
-              <form id="tool-test-form">
-                <div
-                  id="tool-test-form-fields"
-                  class="space-y-4 text-gray-700 dark:text-gray-400"
-                >
-                  <!-- Fields will be dynamically inserted here based on the tool's input schema -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3
+                    id="tool-test-modal-title"
+                    class="text-xl font-bold text-gray-900 dark:text-gray-100"
+                  >
+                    Test Tool
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Execute this tool with custom input parameters.
+                  </p>
                 </div>
-                <div class="mt-4 border-t pt-4">
-                  <div>
-                    <label
-                      for="test-passthrough-headers"
-                      class="block text-sm font-medium text-gray-700 dark:text-gray-400"
-                    >
-                      Passthrough Headers (Optional)
-                    </label>
-                    <small class="text-gray-500 dark:text-gray-400 block mb-2">
-                      Additional headers to send with the request (format:
-                      "Header-Name: Value", one per line)
-                    </small>
-                    <textarea
-                      id="test-passthrough-headers"
-                      name="passthrough_headers"
-                      rows="3"
-                      placeholder="Authorization: Bearer your-token&#10;X-Tenant-Id: tenant-123&#10;X-Trace-Id: trace-456"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:figma-blue-border dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
-                    ></textarea>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  TEST
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
+              <!-- Tool description -->
+              <div class="mb-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
+                <div class="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-2">
+                  Description
+                </div>
+                <div
+                  id="tool-test-modal-description"
+                  class="text-sm leading-relaxed text-gray-700 dark:text-gray-300"
+                ></div>
+              </div>
+
+              <form id="tool-test-form">
+                <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900/40 mb-4">
+                  <div class="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-3">
+                    Input Parameters
+                  </div>
+                  <div
+                    id="tool-test-form-fields"
+                    class="space-y-3 text-gray-700 dark:text-gray-300"
+                  >
+                    <!-- Fields will be dynamically inserted here based on the tool's input schema -->
                   </div>
                 </div>
-                <div class="mt-4">
+
+                <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900/40">
+                  <label
+                    for="test-passthrough-headers"
+                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Passthrough Headers (Optional)
+                  </label>
+                  <small class="text-gray-500 dark:text-gray-400 block mb-2">
+                    Additional headers to send with the request (one per line, e.g. <code>Authorization: Bearer ...</code>)
+                  </small>
+                  <textarea
+                    id="test-passthrough-headers"
+                    name="passthrough_headers"
+                    rows="3"
+                    placeholder="Authorization: Bearer your-token&#10;X-Tenant-Id: tenant-123&#10;X-Trace-Id: trace-456"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-400 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:figma-blue-border bg-white dark:bg-white text-gray-900 dark:text-gray-900"
+                  ></textarea>
+                </div>
+
+                <div class="mt-4 flex items-center justify-end gap-3">
+                  <div id="tool-test-loading" style="display: none">
+                    <div class="spinner"></div>
+                  </div>
                   <button
                     type="button"
                     onclick="runToolTest()"
-                    class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                    class="gw-modal-primary inline-flex justify-center py-2 px-4 text-sm font-semibold"
                   >
                     Run Tool
                   </button>
                 </div>
-                <div id="tool-test-loading" style="display: none">
-                  <div class="spinner"></div>
-                </div>
               </form>
-              <!-- The result area now uses a fixed height for a larger view -->
-              <div
-                id="tool-test-result"
-                class="mt-4 bg-gray-100 p-2 rounded overflow-auto dark:bg-gray-900 dark:text-gray-300"
-                style="height: 400px"
-              ></div>
+
+              <div class="mt-5 rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900/50">
+                <div class="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-2">
+                  Result
+                </div>
+                <div
+                  id="tool-test-result"
+                  class="bg-gray-100 p-2 rounded overflow-auto dark:bg-gray-900 dark:text-white"
+                  style="height: 360px"
+                >
+                  <div class="text-sm text-gray-500 dark:text-gray-400 italic p-2">
+                    Run the tool to view request/response output.
+                  </div>
+                </div>
+              </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8"
             >
               <button
                 type="button"
                 onclick="closeModal('tool-test-modal', 'tool-test-result')"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-secondary w-full sm:w-auto inline-flex justify-center px-4 py-2 text-sm font-semibold"
               >
                 Close
               </button>
@@ -7408,7 +7505,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Tool Edit Modal -->
       <div
         id="tool-edit-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -7417,15 +7514,26 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Edit Tool
-              </h3>
-              <div class="mt-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Edit Tool
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Update tool configuration, auth, schema, and visibility.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  EDIT
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
+              <div>
                 <form id="edit-tool-form" method="POST">
                   <div class="grid grid-cols-1 gap-6">
                     <input type="hidden" name="name" id="edit-tool-name" />
@@ -7683,19 +7791,17 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                         </div>
                       </div>
                     </div>
-                  <div
-                    class="mt-6 flex justify-end space-x-3 bg-white dark:bg-gray-900 dark:text-gray-100"
-                  >
+                  <div class="mt-6 flex justify-end space-x-3">
                     <button
                       type="button"
                       onclick="closeModal('tool-edit-modal')"
-                      class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:text-gray-300"
+                      class="gw-modal-secondary px-4 py-2 text-sm font-semibold"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      class="gw-modal-primary inline-flex justify-center py-2 px-4 text-sm font-semibold"
                     >
                       Save Changes
                     </button>
@@ -8123,7 +8229,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       </div> -->
 
       <!-- Gateway Detail Modal -->
-      <div id="gateway-modal" class="fixed z-10 inset-0 overflow-y-auto hidden">
+      <div id="gateway-modal" class="fixed z-50 inset-0 overflow-y-auto hidden">
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
         >
@@ -8131,26 +8237,37 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Gateway Details
-              </h3>
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Gateway Details
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Configuration and metadata for this gateway.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  VIEW
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
               <div
-                class="mt-4 space-y-4 bg-white dark:bg-gray-400"
+                class="space-y-4"
                 id="gateway-details"
               ></div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8"
             >
               <button
                 type="button"
                 onclick="closeModal('gateway-modal')"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-primary w-full sm:w-auto inline-flex justify-center px-6 py-2.5 text-sm font-semibold"
               >
                 Close
               </button>
@@ -8165,7 +8282,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
         id="gateway-bulk-test-modal"
         class="fixed z-50 inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center hidden"
       >
-       <div class="bg-white shadow rounded-lg p-6 dark:bg-gray-800 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+       <div class="gw-modal-card p-6 sm:p-8 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
 
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -8173,15 +8290,23 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                 Gateway Tool Testing
               </h2>
               <p class="text-sm text-gray-600 dark:text-gray-300">
-                Loads the Gateway Tools, Prompts And Resources
+                Load and test tools for this gateway.
               </p>
             </div>
+            <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+              TEST
+            </span>
+          </div>
 
+          <div class="gw-modal-divider my-5"></div>
+
+          <div class="flex items-start justify-between gap-4">
+            <div></div>
             <div class="flex gap-2">
               <button
                 type="button"
                 id="gateway-bulk-test-reload"
-                class="px-3 py-1 border border-blue-600 rounded bg-white text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
+                class="gw-modal-secondary px-3 py-2 text-sm font-semibold"
               >
                 Reload
               </button>
@@ -8189,7 +8314,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               <button
                 type="button"
                 id="gateway-bulk-test-run-selected"
-                class="btn-primary text-white focus:outline-none px-3 py-1"
+                class="gw-modal-primary px-3 py-2 text-sm font-semibold"
               >
                 Run Selected
               </button>
@@ -8197,7 +8322,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               <button
                 type="button"
                 id="gateway-bulk-test-run-all"
-                class="btn-primary text-white focus:outline-none px-3 py-1"
+                class="gw-modal-primary px-3 py-2 text-sm font-semibold"
               >
                 Run All
               </button>
@@ -8205,7 +8330,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               <button
                 type="button"
                 id="gateway-bulk-test-close"
-                class="px-3 py-1 border border-blue-600 rounded bg-white text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
+                class="gw-modal-secondary px-3 py-2 text-sm font-semibold"
               >
                 Close
               </button>
@@ -8250,7 +8375,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Gateway Edit Modal -->
       <div
         id="gateway-edit-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -8259,15 +8384,26 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Edit Gateway
-              </h3>
-              <div class="mt-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Edit Gateway
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Update gateway settings and authentication configuration.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  EDIT
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
+              <div>
                 <form id="edit-gateway-form" method="POST">
                   <div class="grid grid-cols-1 gap-6">
                     <div>
@@ -8607,18 +8743,18 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                     </div>
                   </div>
                   <div
-                    class="mt-6 flex justify-end space-x-3 bg-white dark:bg-gray-900 dark:text-gray-100"
+                    class="mt-6 flex justify-end space-x-3"
                   >
                     <button
                       type="button"
                       onclick="closeModal('gateway-edit-modal')"
-                      class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:text-gray-300"
+                      class="gw-modal-secondary px-4 py-2 text-sm font-semibold"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      class="gw-modal-primary inline-flex justify-center py-2 px-4 text-sm font-semibold"
                     >
                       Save Changes
                     </button>
@@ -8631,7 +8767,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       </div>
 
       <!-- Server Detail Modal -->
-      <div id="server-modal" class="fixed z-10 inset-0 overflow-y-auto hidden">
+      <div id="server-modal" class="fixed z-50 inset-0 overflow-y-auto hidden">
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
         >
@@ -8639,26 +8775,37 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Server Details
-              </h3>
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Virtual Server Details
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Configuration and metadata for this virtual server.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  VIEW
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
               <div
-                class="mt-4 space-y-4 bg-white dark:bg-gray-900"
+                class="space-y-4"
                 id="server-details"
               ></div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8"
             >
               <button
                 type="button"
                 onclick="closeModal('server-modal')"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-primary w-full sm:w-auto inline-flex justify-center px-6 py-2.5 text-sm font-semibold"
               >
                 Close
               </button>
@@ -8670,7 +8817,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Server Edit Modal -->
       <div
         id="server-edit-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -8679,15 +8826,26 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                Edit Server
-              </h3>
-              <div class="mt-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Edit Virtual Server
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Update server settings, visibility, and associated tools.
+                  </p>
+                </div>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  EDIT
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
+              <div>
                 <form id="edit-server-form" method="POST">
                   <div class="grid grid-cols-1 gap-6">
                     <!-- Existing fields -->
@@ -8957,19 +9115,17 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                       ></div>
                     </div> -->
                   </div>
-                  <div
-                    class="mt-6 flex justify-end space-x-3 bg-white dark:bg-gray-900 dark:text-gray-100"
-                  >
+                  <div class="mt-6 flex justify-end space-x-3">
                     <button
                       type="button"
                       onclick="closeModal('server-edit-modal')"
-                      class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:text-gray-300"
+                      class="gw-modal-secondary px-4 py-2 text-sm font-semibold"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      class="gw-modal-primary inline-flex justify-center py-2 px-4 text-sm font-semibold"
                     >
                       Save Changes
                     </button>
@@ -8985,7 +9141,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Config Selection Modal -->
       <div
         id="config-selection-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -8994,16 +9150,20 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
-              <h3
-                class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4"
-              >
-                Export Configuration for <span id="server-name-display"></span>
-              </h3>
+              <div class="flex items-center justify-between">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Export Configuration for <span id="server-name-display"></span>
+                </h3>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-[#f2b705]/10 text-[#7a5200] dark:bg-[#f2b705]/20 dark:text-[#ffe08a]">
+                  EXPORT
+                </span>
+              </div>
+              <div class="gw-modal-divider my-5"></div>
               <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
                 Choose the configuration format for your MCP client:
               </p>
@@ -9059,12 +9219,12 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8"
             >
               <button
                 type="button"
                 onclick="closeModal('config-selection-modal')"
-                class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-secondary w-full sm:w-auto inline-flex justify-center px-4 py-2 text-sm font-semibold"
               >
                 Cancel
               </button>
@@ -9076,7 +9236,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       <!-- Config Display Modal -->
       <div
         id="config-display-modal"
-        class="fixed z-10 inset-0 overflow-y-auto hidden"
+        class="fixed z-50 inset-0 overflow-y-auto hidden"
       >
         <div
           class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
@@ -9085,24 +9245,25 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
           </div>
           <div
-            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
+            class="gw-modal-card inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full"
           >
             <div
-              class="bg-white dark:bg-gray-900 px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+              class="px-6 py-6 sm:px-8"
             >
               <div class="flex items-center justify-between mb-4">
                 <h3
-                  class="text-lg font-medium text-gray-900 dark:text-gray-100"
+                  class="text-xl font-bold text-gray-900 dark:text-gray-100"
                 >
                   <span id="config-display-title">Client Configuration</span>
                 </h3>
                 <button
                   onclick="copyConfigToClipboard()"
-                  class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  class="gw-modal-primary inline-flex items-center px-3 py-2 text-sm font-semibold"
                 >
                   Copy to Clipboard
                 </button>
               </div>
+              <div class="gw-modal-divider mb-5"></div>
 
               <div class="mb-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
@@ -9132,24 +9293,24 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
               </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
+              class="px-6 pb-6 sm:px-8 sm:flex sm:flex-row-reverse"
             >
               <button
                 onclick="downloadConfig()"
-                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm"
+                class="gw-modal-primary w-full inline-flex justify-center px-4 py-2 text-sm font-semibold sm:ml-3 sm:w-auto"
               >
                 Download JSON
               </button>
               <button
                 onclick="goBackToSelection()"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-secondary mt-3 w-full inline-flex justify-center px-4 py-2 text-sm font-semibold sm:mt-0 sm:ml-3 sm:w-auto"
               >
                 ← Back
               </button>
               <button
                 type="button"
                 onclick="closeModal('config-display-modal')"
-                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:text-gray-300"
+                class="gw-modal-secondary mt-3 w-full inline-flex justify-center px-4 py-2 text-sm font-semibold sm:mt-0 sm:ml-3 sm:w-auto"
               >
                 Close
               </button>
@@ -9221,11 +9382,16 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
 
         try {
           const url = new URL(window.location.href);
+          const activeTabHref =
+            document.querySelector(".tab-link.figma-blue-border")?.getAttribute("href") ||
+            window.location.hash ||
+            "#gateways";
           if (teamId && teamId !== '') {
             url.searchParams.set('team_id', teamId);
           } else {
             url.searchParams.delete('team_id');
           }
+          url.hash = activeTabHref.startsWith("#") ? activeTabHref : "#gateways";
 
           // Use assign so browser navigates and we get a brand-new initial render
           // (pushState + DOM replacements is the root cause of the stack overflow).
@@ -10088,8 +10254,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
           logStreamSource.close();
           logStreamSource = null;
           button.textContent = "Start Live Stream";
-          button.className =
-            "px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700";
+          button.className = "logs-btn-success px-3 py-2 text-sm font-semibold";
         } else {
           // Start streaming
           const level = document.getElementById("log-level-filter").value;
@@ -10117,8 +10282,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
           };
 
           button.textContent = "Stop Live Stream";
-          button.className =
-            "px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700";
+          button.className = "logs-btn-danger px-3 py-2 text-sm font-semibold";
         }
       }
 
@@ -10202,11 +10366,65 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
         }
       }
 
+      function normalizePermissionErrorMessage(message) {
+        const raw = String(message || "");
+        const lower = raw.toLowerCase();
+        const isPermissionError =
+          lower.includes("403") ||
+          lower.includes("forbidden") ||
+          lower.includes("permission denied") ||
+          lower.includes("insufficient permission") ||
+          lower.includes("insufficient permissions") ||
+          lower.includes("not enough permissions") ||
+          lower.includes("access denied") ||
+          lower.includes("not authorized") ||
+          lower.includes("unauthorized");
+
+        if (!isPermissionError) {
+          return raw;
+        }
+
+        const requiredMatch = raw.match(/required:\s*([a-z0-9._:-]+)/i);
+        const requiredPerm = requiredMatch?.[1] || "";
+
+        if (!requiredPerm) {
+          return "You don't have permission to perform this action.";
+        }
+
+        const [resourceRaw = "resource", actionRaw = "access"] = requiredPerm.split(".");
+        const resource = resourceRaw.replace(/[_-]+/g, " ").trim();
+
+        const actionMap = {
+          create: "create",
+          read: "view",
+          view: "view",
+          list: "view",
+          discover: "discover",
+          update: "edit",
+          edit: "edit",
+          write: "edit",
+          delete: "delete",
+          remove: "delete",
+          test: "test",
+          invoke: "test",
+          execute: "test",
+          manage: "manage",
+          admin: "manage",
+          toggle: "manage",
+          activate: "manage",
+          deactivate: "manage"
+        };
+
+        const action = actionMap[actionRaw] || "access";
+        return `You don't have permission to ${action} ${resource}. Required: ${requiredPerm} (or admin access).`;
+      }
+
       function showErrorMessage(message) {
+        const normalized = normalizePermissionErrorMessage(message);
         const toast = document.createElement("div");
         toast.className =
           "fixed top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse";
-        toast.textContent = message;
+        toast.textContent = normalized;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
       }
@@ -10249,22 +10467,22 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             modal.className =
               "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
             modal.innerHTML = `
-              <div class="bg-white rounded-lg p-6 max-w-md w-full max-h-96 overflow-y-auto">
-                <h3 class="text-lg font-bold mb-4">Available Log Files</h3>
-                <p class="text-sm text-gray-600 mb-4">Directory: ${data.log_directory}</p>
+              <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Available Log Files</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Directory: ${data.log_directory}</p>
                 <ul class="space-y-2">
                   ${data.files
                     .map(
                       (file) => `
-                    <li class="flex justify-between items-center p-2 hover:bg-gray-100 rounded">
+                    <li class="flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-100 dark:border-gray-700">
                       <div>
-                        <div class="font-medium">${file.name}</div>
-                        <div class="text-xs text-gray-500">
+                        <div class="font-medium text-gray-900 dark:text-gray-100">${file.name}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
                           ${(file.size / 1024).toFixed(1)} KB - ${new Date(file.modified).toLocaleString()}
                         </div>
                       </div>
                       <button onclick="downloadLogFile('${file.name}')"
-                              class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                              class="px-3 py-1.5 text-sm font-semibold rounded-lg bg-[#2561C1] text-white hover:bg-[#1f56ad]">
                         Download
                       </button>
                     </li>
@@ -10273,7 +10491,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                     .join("")}
                 </ul>
                 <button onclick="this.closest('.fixed').remove()"
-                        class="mt-4 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 w-full">
+                        class="mt-4 px-4 py-2 text-sm font-semibold w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
                   Close
                 </button>
               </div>
@@ -11583,7 +11801,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
     </div>
 
     <!-- Create Team Modal -->
-    <div id="create-team-modal" class="fixed inset-0 z-50 hidden">
+    <div id="create-team-modal-legacy" class="fixed inset-0 z-50 hidden">
       <div
         class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
       >
@@ -11627,12 +11845,12 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
 
 
             <div
-              id="create-team-error"
+              id="create-team-error-legacy"
               class="hidden mb-3 text-sm text-red-600"
             ></div>
 
             <form
-              id="create-team-form"
+              id="create-team-form-legacy"
               onsubmit="submitCreateTeam(event)"
             >
               <div class="space-y-4">
@@ -11645,7 +11863,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                   <input
                     type="text"
                     name="name"
-                    id="team-name"
+                    id="team-name-legacy"
                     required
                     maxlength="100"
                     class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:figma-blue-border dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -11664,7 +11882,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                   </label>
                   <textarea
                     name="description"
-                    id="team-description"
+                    id="team-description-legacy"
                     rows="3"
                     maxlength="500"
                     class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:figma-blue-border dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -11731,7 +11949,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
                   <input
                     type="number"
                     name="max_members"
-                    id="team-max-members"
+                    id="team-max-members-legacy"
                     min="1"
                     max="1000"
                     value="50"
@@ -11880,29 +12098,47 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             ✕
           </button>
 
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-            Request to Join Team
-          </h3>
+          <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5">
+            <div class="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Request To Join Team
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Send a join request to team owners.
+                </p>
+              </div>
+              <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold tracking-wide bg-[#f2b705]/20 text-[#8a6a00]">
+                REQUEST
+              </span>
+            </div>
 
-          <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
-            Are you sure you want to request to join
-            <span id="join-confirm-team-name" class="font-medium"></span>?
-          </p>
+            <div class="gw-divider mb-4"></div>
 
-          <div class="flex justify-end gap-3">
-            <button
-              onclick="closeJoinConfirm()"
-              class="px-4 py-2 text-sm rounded bg-gray-200"
-            >
-              Cancel
-            </button>
-            <button
-              id="confirm-join-btn"
-              onclick="confirmJoinRequest()"
-              class="px-4 py-2 bg-indigo-600 text-white rounded"
-            >
-              Yes, Request to Join
-            </button>
+            <p class="text-sm text-gray-700 dark:text-gray-300 mb-4">
+              Are you sure you want to request to join
+              <span id="join-confirm-team-name" class="font-semibold"></span>?
+            </p>
+
+            <div id="join-confirm-error" class="hidden mb-4 text-sm text-red-600 dark:text-red-300"></div>
+
+            <div class="flex justify-end gap-3">
+              <button
+                type="button"
+                onclick="closeJoinConfirm()"
+                class="px-4 py-2 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-join-btn"
+                type="button"
+                onclick="confirmJoinRequest()"
+                class="px-4 py-2 rounded-xl text-sm font-semibold bg-[#2561C1] hover:bg-[#1f56ad] text-white"
+              >
+                Request To Join
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -11926,29 +12162,45 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
             ✕
           </button>
 
-          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-            Invite User
-            </h3>
-
-          <!-- Tabs -->
-          <div class="flex gap-2 mb-4">
-                <button
-              class="px-3 py-1 bg-gray-200 rounded text-sm"
-              onclick="showInviteTab('send')"
-                >
-              Send Invite
-                </button>
-
-                <button
-              class="px-3 py-1 bg-gray-200 rounded text-sm"
-              onclick="showInviteTab('pending')"
-                >
-              Pending
-                </button>
+          <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5">
+            <div class="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Invite Team Members
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Send invitations and manage pending invites in one place.
+                </p>
               </div>
+              <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold tracking-wide bg-[#f2b705]/20 text-[#8a6a00]">
+                INVITE
+              </span>
+            </div>
 
-          <!-- Dynamic Content Goes Here -->
-          <div id="invite-tab-content"></div>
+            <div id="invite-inline-status" class="hidden mb-4 rounded-lg px-3 py-2 text-sm"></div>
+            <div class="mb-4 flex items-center gap-2">
+              <button
+                type="button"
+                data-invite-tab="send"
+                class="min-w-[140px] px-4 py-2 rounded-md text-sm font-semibold bg-[#2561C1] text-white shadow-sm"
+                onclick="showInviteTab('send', this)"
+              >
+                Send Invite
+              </button>
+              <button
+                type="button"
+                data-invite-tab="pending"
+                class="min-w-[140px] px-4 py-2 rounded-md text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                onclick="showInviteTab('pending', this)"
+              >
+                Pending
+              </button>
+            </div>
+            <div class="gw-divider mb-4"></div>
+
+            <!-- Dynamic Content Goes Here -->
+            <div id="invite-tab-content"></div>
+          </div>
 
         </div>
       </div>
@@ -12079,28 +12331,39 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
 
       // Team Management Functions
       function openCreateTeamModal() {
-        document.getElementById('create-team-modal').classList.remove('hidden');
-        // Focus on team name field
+        const inline = document.getElementById('team-create-content');
+        if (inline) inline.classList.remove('hidden');
         setTimeout(() => {
-          document.getElementById('team-name').focus();
+          const nameInput = document.getElementById('team-name');
+          if (nameInput) nameInput.focus();
         }, 100);
       }
 
       function closeCreateTeamModal() {
-        document.getElementById('create-team-modal').classList.add('hidden');
-        document.getElementById('create-team-form').reset();
+        const inline = document.getElementById('team-create-content');
+        if (inline) inline.classList.add('hidden');
+        const form = document.getElementById('create-team-form');
+        if (form) form.reset();
+        const legacyModal = document.getElementById('create-team-modal-legacy');
+        if (legacyModal) legacyModal.classList.add('hidden');
       }
 
       function showCreateTeamError(message) {
         const el = document.getElementById('create-team-error');
         el.textContent = message;
         el.classList.remove('hidden');
+        if (typeof showErrorMessage === 'function') {
+          showErrorMessage(message);
+        }
       }
 
       function showGlobalSuccess(message) {
+        if (typeof showSuccessMessage === 'function') {
+          showSuccessMessage(message);
+          return;
+        }
         const popup = document.getElementById('global-success-message');
         const text = document.getElementById('global-success-text');
-
         text.textContent = message;
         popup.classList.remove('hidden');
       }
@@ -12116,7 +12379,10 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
       async function submitCreateTeam(event) {
         event.preventDefault();
 
-        const form = document.getElementById('create-team-form');
+        const form = event?.target?.id === 'create-team-form'
+          ? event.target
+          : document.getElementById('create-team-form');
+        if (!form) return;
         const errorEl = document.getElementById('create-team-error');
         errorEl.classList.add('hidden');
 
@@ -12148,7 +12414,7 @@ Hello &#123;&#123; name &#125;&#125;, welcome to &#123;&#123; company &#125;&#12
 
           // ✅ SUCCESS
           closeCreateTeamModal();
-          showGlobalSuccess(`"${payload.name}" is created successfully`);
+          showGlobalSuccess(`"${payload.name}" was created successfully`);
 
           loadTeamsByRelationship('all');
 

@@ -1,9 +1,7 @@
 <!-- htmlhint doctype-first:false -->
-<div class="space-y-6">
+<div class="version-shell space-y-6">
   <!-- Application Overview Card (Similar to System Summary) -->
-  <div
-    class="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-6 text-white"
-  >
+  <div class="version-hero-card p-6 sm:p-7">
     <h2 class="text-2xl font-bold mb-4 flex items-center">
       <svg
         class="h-8 w-8 mr-3"
@@ -57,7 +55,7 @@
   </div>
 
   <!-- Platform & Runtime Card -->
-  <div class="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
+  <div class="version-surface-card p-6">
     <h3 class="text-lg font-medium mb-4 dark:text-gray-200 flex items-center">
       <svg
         class="h-6 w-6 mr-2 text-indigo-600"
@@ -75,7 +73,7 @@
       Platform &amp; Runtime
     </h3>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-gray-50 rounded p-4 dark:bg-gray-700">
+      <div class="version-subcard p-4">
         <div class="text-sm font-medium text-gray-500 dark:text-gray-400">
           Python Version
         </div>
@@ -83,7 +81,7 @@
           {{ payload.platform.python }}
         </div>
       </div>
-      <div class="bg-gray-50 rounded p-4 dark:bg-gray-700">
+      <div class="version-subcard p-4">
         <div class="text-sm font-medium text-gray-500 dark:text-gray-400">
           FastAPI Version
         </div>
@@ -91,7 +89,7 @@
           {{ payload.platform.fastapi }}
         </div>
       </div>
-      <div class="bg-gray-50 rounded p-4 dark:bg-gray-700">
+      <div class="version-subcard p-4">
         <div class="text-sm font-medium text-gray-500 dark:text-gray-400">
           Operating System
         </div>
@@ -103,7 +101,7 @@
   </div>
 
   <!-- Services Status Card -->
-  <div class="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
+  <div class="version-surface-card p-6">
     <h3 class="text-lg font-medium mb-4 dark:text-gray-200 flex items-center">
       <svg
         class="h-6 w-6 mr-2 text-indigo-600"
@@ -261,7 +259,7 @@
   </div>
 
   <!-- System Resources Card -->
-  <div class="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
+  <div class="version-surface-card p-6">
     <h3 class="text-lg font-medium mb-4 dark:text-gray-200 flex items-center">
       <svg
         class="h-6 w-6 mr-2 text-indigo-600"
@@ -280,9 +278,7 @@
     </h3>
     <div class="space-y-4">
       <!-- CPU Info -->
-      <div
-        class="flex justify-between items-center p-3 bg-gray-50 rounded dark:bg-gray-700"
-      >
+      <div class="version-data-row flex justify-between items-center p-3">
         <span class="text-gray-600 dark:text-gray-400">CPU:</span>
         <span class="font-medium dark:text-gray-200"
           >{{ payload.system.cpu_count }} × {{ payload.system.cpu_freq_mhz }}
@@ -291,9 +287,7 @@
       </div>
 
       <!-- Memory Info -->
-      <div
-        class="flex justify-between items-center p-3 bg-gray-50 rounded dark:bg-gray-700"
-      >
+      <div class="version-data-row flex justify-between items-center p-3">
         <span class="text-gray-600 dark:text-gray-400">Memory:</span>
         <span class="font-medium dark:text-gray-200"
           >{{ "{:.1f}".format(payload.system.mem_used_mb) }} / {{
@@ -302,9 +296,7 @@
       </div>
 
       <!-- Disk Info -->
-      <div
-        class="flex justify-between items-center p-3 bg-gray-50 rounded dark:bg-gray-700"
-      >
+      <div class="version-data-row flex justify-between items-center p-3">
         <span class="text-gray-600 dark:text-gray-400">Disk:</span>
         <span class="font-medium dark:text-gray-200"
           >{{ "{:.1f}".format(payload.system.disk_used_gb) }} / {{
@@ -313,9 +305,7 @@
       </div>
 
       <!-- Boot Time -->
-      <div
-        class="flex justify-between items-center p-3 bg-gray-50 rounded dark:bg-gray-700"
-      >
+      <div class="version-data-row flex justify-between items-center p-3">
         <span class="text-gray-600 dark:text-gray-400">Boot Time:</span>
         <span class="font-medium dark:text-gray-200"
           >{{ payload.system.boot_time }}</span
