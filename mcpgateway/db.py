@@ -1398,32 +1398,6 @@ class ServerMetric(Base):
     server: Mapped["Server"] = relationship("Server", back_populates="metrics")
 
 
-class GatewayMetric(Base):
-    """
-    ORM model for recording metrics for gateway (MCP Server) test executions.
-
-    Attributes:
-        id (int): Primary key.
-        gateway_id (str): Foreign key linking to the gateway.
-        timestamp (datetime): The time when the test execution occurred.
-        response_time (float): The response time in seconds for all tool tests.
-        is_success (bool): True if all tests succeeded, False if any failed.
-        error_message (Optional[str]): Error message if any test failed.
-    """
-
-    __tablename__ = "gateway_metrics"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    gateway_id: Mapped[str] = mapped_column(String(36), ForeignKey("gateways.id"), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    response_time: Mapped[float] = mapped_column(Float, nullable=False)
-    is_success: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Relationship back to the Gateway model.
-    gateway: Mapped["Gateway"] = relationship("Gateway", back_populates="metrics")
-
-
 class PromptMetric(Base):
     """
     ORM model for recording metrics for prompt invocations.
@@ -2392,9 +2366,6 @@ class Gateway(Base):
 
     # Header passthrough configuration
     passthrough_headers: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # Store list of strings as JSON array
-
-    # Metrics relationship
-    metrics: Mapped[List["GatewayMetric"]] = relationship("GatewayMetric", back_populates="gateway", cascade="all, delete-orphan")
 
     # Relationship with local tools this gateway provides
     tools: Mapped[List["Tool"]] = relationship(back_populates="gateway", foreign_keys="Tool.gateway_id", cascade="all, delete-orphan")
