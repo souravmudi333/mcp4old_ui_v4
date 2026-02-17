@@ -1150,7 +1150,7 @@ function displayMetrics(data) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 <h3 class="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">No Metrics Available</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Metrics data will appear here once tools, gateways, or servers are executed.</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Metrics data will appear here once tools or gateways are executed.</p>
                 <button onclick="retryLoadMetrics()" class="metrics-primary-btn mt-4 px-4 py-2 text-sm font-semibold">
                     Refresh Metrics
                 </button>
@@ -1217,12 +1217,6 @@ function displayMetrics(data) {
         if (data.gateways) {
             const gatewaysCard = createMetricsCard("Gateways", data.gateways);
             metricsContainer.appendChild(gatewaysCard);
-        }
-
-        // Servers metrics
-        if (data.servers) {
-            const serversCard = createMetricsCard("Servers", data.servers);
-            metricsContainer.appendChild(serversCard);
         }
 
         // Performance metrics
@@ -1439,7 +1433,6 @@ function extractKPIData(data) {
             "resources",
             "prompts",
             "gateways",
-            "servers",
         ];
         categories.forEach((category) => {
             if (data[category]) {
@@ -1557,7 +1550,6 @@ function createEnhancedTopPerformersSection(topData) {
             // "resources",
             // "prompts",
             "gateways",
-            "servers",
         ];
         entityTypes.forEach((type, index) => {
             if (topData[type] && Array.isArray(topData[type])) {
@@ -1824,7 +1816,6 @@ function showTopPerformerTab(activeType) {
         // "resources",
         // "prompts",
         "gateways",
-        "servers",
     ];
     entityTypes.forEach((type) => {
         const panel = document.getElementById(`top-${type}-panel`);
@@ -1888,7 +1879,7 @@ function exportMetricsToCSV(topData) {
     ];
     const rows = [];
 
-    ["tools", /*"resources", "prompts",*/ "gateways", "servers"].forEach((type) => {
+    ["tools", /*"resources", "prompts",*/ "gateways"].forEach((type) => {
         if (topData[type] && Array.isArray(topData[type])) {
             topData[type].forEach((item, index) => {
                 rows.push([

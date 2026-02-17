@@ -7191,12 +7191,12 @@ async def get_aggregated_metrics(
         "tools": await tool_service.aggregate_metrics(db),
         "resources": await resource_service.aggregate_metrics(db),
         "prompts": await prompt_service.aggregate_metrics(db),
-        "servers": await server_service.aggregate_metrics(db),
+        "gateways": await gateway_service.aggregate_metrics(db),
         "topPerformers": {
             "tools": await tool_service.get_top_tools(db, limit=5),
             "resources": await resource_service.get_top_resources(db, limit=5),
             "prompts": await prompt_service.get_top_prompts(db, limit=5),
-            "servers": await server_service.get_top_servers(db, limit=5),
+            "gateways": await gateway_service.get_top_gateways(db, limit=5),
         },
     }
     return metrics

@@ -54,7 +54,7 @@ import httpx
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, desc, Float, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,8 +74,9 @@ from mcpgateway.db import Prompt as DbPrompt
 from mcpgateway.db import Resource as DbResource
 from mcpgateway.db import SessionLocal
 from mcpgateway.db import Tool as DbTool
+from mcpgateway.db import ToolMetric
 from mcpgateway.observability import create_span
-from mcpgateway.schemas import GatewayCreate, GatewayRead, GatewayUpdate, PromptCreate, ResourceCreate, ToolCreate
+from mcpgateway.schemas import GatewayCreate, GatewayRead, GatewayUpdate, PromptCreate, ResourceCreate, ToolCreate, TopPerformer
 
 # logging.getLogger("httpx").setLevel(logging.WARNING)  # Disables httpx logs for regular health checks
 from mcpgateway.services.logging_service import LoggingService
@@ -84,6 +85,7 @@ from mcpgateway.services.team_management_service import TeamManagementService
 from mcpgateway.services.tool_service import ToolService
 from mcpgateway.utils.create_slug import slugify
 from mcpgateway.utils.display_name import generate_display_name
+from mcpgateway.utils.metrics_common import build_top_performers
 from mcpgateway.utils.retry_manager import ResilientHttpClient
 from mcpgateway.utils.services_auth import decode_auth, encode_auth
 from mcpgateway.utils.sqlalchemy_modifier import json_contains_expr
@@ -2647,3 +2649,97 @@ class GatewayService:  # pylint: disable=too-many-instance-attributes
                         logger.warning(f"Failed to fetch prompts: {e}")
 
                 return capabilities, tools, resources, prompts
+
+    # --- Metrics ---
+    async def aggregate_metrics(self, db: Session) -> Dict[str, Any]:
+        """Aggregate gateway metrics from executions of gateway-backed tools."""
+        total = (
+            db.query(func.count(ToolMetric.id))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None))
+            .scalar()
+            or 0
+        )
+        successful = (
+            db.query(func.count(ToolMetric.id))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None), ToolMetric.is_success.is_(True))
+            .scalar()
+            or 0
+        )
+        failed = (
+            db.query(func.count(ToolMetric.id))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None), ToolMetric.is_success.is_(False))
+            .scalar()
+            or 0
+        )
+        failure_rate = failed / total if total > 0 else 0.0
+
+        min_rt = (
+            db.query(func.min(ToolMetric.response_time))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None))
+            .scalar()
+        )
+        max_rt = (
+            db.query(func.max(ToolMetric.response_time))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None))
+            .scalar()
+        )
+        avg_rt = (
+            db.query(func.avg(ToolMetric.response_time))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None))
+            .scalar()
+        )
+        last_time = (
+            db.query(func.max(ToolMetric.timestamp))  # pylint: disable=not-callable
+            .join(DbTool, ToolMetric.tool_id == DbTool.id)
+            .filter(DbTool.gateway_id.is_not(None))
+            .scalar()
+        )
+
+        return {
+            "total_executions": total,
+            "successful_executions": successful,
+            "failed_executions": failed,
+            "failure_rate": failure_rate,
+            "min_response_time": min_rt,
+            "max_response_time": max_rt,
+            "avg_response_time": avg_rt,
+            "last_execution_time": last_time,
+        }
+
+    async def get_top_gateways(
+        self, db: Session, limit: int = 5
+    ) -> List[TopPerformer]:
+        """Get top gateways ranked by execution count of gateway-backed tools."""
+        results = (
+            db.query(
+                DbGateway.id,
+                DbGateway.name,
+                func.count(ToolMetric.id).label("execution_count"),  # pylint: disable=not-callable
+                func.avg(ToolMetric.response_time).label("avg_response_time"),  # pylint: disable=not-callable
+                case(
+                    (
+                        func.count(ToolMetric.id) > 0,  # pylint: disable=not-callable
+                        func.sum(
+                            case((ToolMetric.is_success.is_(True), 1), else_=0)
+                        ).cast(Float)
+                        / func.count(ToolMetric.id)
+                        * 100,  # pylint: disable=not-callable
+                    ),
+                    else_=None,
+                ).label("success_rate"),
+                func.max(ToolMetric.timestamp).label("last_execution"),  # pylint: disable=not-callable
+            )
+            .outerjoin(DbTool, DbTool.gateway_id == DbGateway.id)
+            .outerjoin(ToolMetric, ToolMetric.tool_id == DbTool.id)
+            .group_by(DbGateway.id, DbGateway.name)
+            .order_by(desc("execution_count"))
+            .limit(limit)
+            .all()
+        )
+        return build_top_performers(results)
